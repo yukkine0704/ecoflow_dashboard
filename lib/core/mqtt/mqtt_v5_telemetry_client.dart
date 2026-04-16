@@ -8,7 +8,7 @@ import 'mqtt_telemetry_client.dart';
 
 class MqttV5TelemetryClient implements MqttTelemetryClient {
   MqttV5TelemetryClient(this.config)
-      : _client = m5.MqttServerClient(config.host, config.clientId) {
+    : _client = m5.MqttServerClient(config.host, config.clientId) {
     _client.port = config.port;
     _client.autoReconnect = config.autoReconnect;
     _client.resubscribeOnAutoReconnect = true;
@@ -24,7 +24,7 @@ class MqttV5TelemetryClient implements MqttTelemetryClient {
   final StreamController<MqttIncomingMessage> _messagesController =
       StreamController<MqttIncomingMessage>.broadcast();
   StreamSubscription<List<m5.MqttReceivedMessage<m5.MqttMessage>>>?
-      _updatesSubscription;
+  _updatesSubscription;
 
   @override
   Stream<MqttIncomingMessage> get messages => _messagesController.stream;
@@ -75,7 +75,12 @@ class MqttV5TelemetryClient implements MqttTelemetryClient {
     bool retain = false,
   }) {
     final builder = m5.MqttPayloadBuilder()..addString(payload);
-    _client.publishMessage(topic, _toQos(qos), builder.payload!, retain: retain);
+    _client.publishMessage(
+      topic,
+      _toQos(qos),
+      builder.payload!,
+      retain: retain,
+    );
   }
 
   @override
