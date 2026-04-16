@@ -1,0 +1,11 @@
+{
+  "sn": "YOUR_DEVICE_SN",
+  "params": {
+    "quotas": [
+      "cmsBattSoc",
+      "cmsMaxChgSoc",
+      "cmsMinDsgSoc",
+      "xboostEn"
+    ]
+  }
+}

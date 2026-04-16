@@ -1,0 +1,12 @@
+{
+  "sn": "YOUR_DEVICE_SN",
+  "cmdId": 17,
+  "dirDest": 1,
+  "dirSrc": 1,
+  "cmdFunc": 254,
+  "dest": 2,
+  "needAck": true,
+  "params": {
+    "cfgBeepEn": true
+  }
+}
