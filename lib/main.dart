@@ -23,6 +23,10 @@ class _MainAppState extends State<MainApp> {
   String _period = 'Hoy';
   double _solarPower = 840;
   bool _isSolarLow = false;
+  int _stepSliderIndex = 5;
+  int _tabIndex = 0;
+  int _expandedMenuIndex = 2;
+
   final _nameController = TextEditingController();
   final _quotaController = TextEditingController(text: '80');
 
@@ -44,19 +48,23 @@ class _MainAppState extends State<MainApp> {
     });
 
     if (!wasLow && isLow) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Alerta solar: potencia baja (${clamped.toStringAsFixed(0)}W).',
-          ),
+      appGooeyToast.warning(
+        'Alerta solar: potencia baja',
+        config: AppToastConfig(
+          description: '${clamped.toStringAsFixed(0)}W por debajo de ${_solarLowThreshold.toInt()}W',
+          position: AppToastPosition.topCenter,
+          meta: 'ECOFLOW',
+          showTimestamp: true,
         ),
       );
     } else if (wasLow && !isLow) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Potencia solar recuperada (${clamped.toStringAsFixed(0)}W).',
-          ),
+      appGooeyToast.success(
+        'Potencia solar recuperada',
+        config: AppToastConfig(
+          description: '${clamped.toStringAsFixed(0)}W estable',
+          position: AppToastPosition.topCenter,
+          meta: 'ECOFLOW',
+          showTimestamp: true,
         ),
       );
     }
@@ -69,11 +77,50 @@ class _MainAppState extends State<MainApp> {
       theme: AppTheme.light(),
       darkTheme: AppTheme.dark(),
       themeMode: _themeMode,
+      builder: (context, child) {
+        return AppGooeyToasterHost(
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
       home: Builder(
         builder: (context) => Scaffold(
           appBar: AppBar(title: const Text('EcoFlow Design System')),
+          bottomNavigationBar: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
+            child: AppLinearBottomTabs(
+              items: const [
+                AppLinearTabItem(icon: Iconsax.home_copy, label: 'Inicio'),
+                AppLinearTabItem(icon: Iconsax.flash_1_copy, label: 'Solar'),
+                AppLinearTabItem(icon: Icons.trending_up, label: 'Pulse'),
+                AppLinearTabItem(icon: Iconsax.setting_2_copy, label: 'Ajustes'),
+              ],
+              selectedIndex: _tabIndex,
+              onTabSelected: (index) => setState(() => _tabIndex = index),
+              expandedItems: const [
+                AppExpandedMenuItem(icon: Iconsax.home_copy, label: 'Home'),
+                AppExpandedMenuItem(icon: Iconsax.message_copy, label: 'Inbox'),
+                AppExpandedMenuItem(icon: Icons.bug_report_outlined, label: 'My Issues'),
+                AppExpandedMenuItem(icon: Iconsax.flash_1_copy, label: 'Pulse'),
+                AppExpandedMenuItem(icon: Iconsax.document_copy, label: 'View'),
+                AppExpandedMenuItem(icon: Icons.rocket_launch_outlined, label: 'Initiatives'),
+                AppExpandedMenuItem(icon: Icons.inventory_2_outlined, label: 'Projects'),
+                AppExpandedMenuItem(icon: Iconsax.setting_copy, label: 'Settings'),
+              ],
+              onExpandedItemSelected: (index) {
+                setState(() => _expandedMenuIndex = index);
+                appGooeyToast.info(
+                  'Menú seleccionado',
+                  config: AppToastConfig(
+                    description: 'Ítem #${index + 1}',
+                    meta: 'LINEAR TABS',
+                    duration: const Duration(milliseconds: 2400),
+                  ),
+                );
+              },
+            ),
+          ),
           body: ListView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 180),
             children: [
               AppCard(
                 surfaceLevel: 1,
@@ -112,7 +159,7 @@ class _MainAppState extends State<MainApp> {
                 value: _solarPower,
                 maxValue: _solarMaxPower,
                 unit: 'W',
-                subtitle: 'Produccion estimada para las proximas 2 horas',
+                subtitle: 'Producción estimada para las próximas 2 horas',
               ),
               const SizedBox(height: AppSpacing.lg),
               AppNeedleGaugeCard(
@@ -120,7 +167,7 @@ class _MainAppState extends State<MainApp> {
                 maxValue: _solarMaxPower,
                 lowPowerThreshold: _solarLowThreshold,
                 title: 'Gauge de Aguja',
-                subtitle: 'Capacidad maxima EcoFlow Delta 3',
+                subtitle: 'Capacidad máxima EcoFlow Delta 3',
                 onLowPowerChanged: (low) {
                   if (!mounted || low == _isSolarLow) {
                     return;
@@ -166,11 +213,38 @@ class _MainAppState extends State<MainApp> {
               ),
               const SizedBox(height: AppSpacing.lg),
               AppCard(
+                surfaceLevel: 1,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Botones',
+                      'StepSlider',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'Índice seleccionado: $_stepSliderIndex',
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    AppStepSlider(
+                      stepCount: 11,
+                      defaultIndex: _stepSliderIndex,
+                      stepShape: StepSliderShape.diamond,
+                      onValueChange: (index) {
+                        setState(() => _stepSliderIndex = index);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.lg),
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Gooey Toast',
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.md),
@@ -179,52 +253,58 @@ class _MainAppState extends State<MainApp> {
                       runSpacing: AppSpacing.sm,
                       children: [
                         AppButton(
-                          label: 'Primario',
-                          onPressed: () {},
-                          leading: const Icon(Iconsax.flash_1_copy),
+                          label: 'Success',
+                          onPressed: () {
+                            appGooeyToast.success(
+                              'Configuración guardada',
+                              config: const AppToastConfig(
+                                description: 'Cambios aplicados en el inversor',
+                                meta: 'SUCCESS',
+                                showTimestamp: true,
+                              ),
+                            );
+                          },
                         ),
                         AppButton(
-                          label: 'Secundario',
-                          variant: AppButtonVariant.secondary,
-                          onPressed: () {},
-                        ),
-                        AppButton(
-                          label: 'Tertiario',
-                          variant: AppButtonVariant.tertiary,
-                          onPressed: () {},
-                        ),
-                        AppButton(
-                          label: 'Peligro',
+                          label: 'Error',
                           variant: AppButtonVariant.danger,
-                          onPressed: () {},
+                          onPressed: () {
+                            appGooeyToast.error(
+                              'No se pudo conectar',
+                              config: AppToastConfig(
+                                description: 'Revisa red y reintenta',
+                                meta: 'NETWORK',
+                                action: AppToastAction(
+                                  label: 'Reintentar',
+                                  onPressed: () {},
+                                ),
+                                bodyLayout: AppToastBodyLayout.spread,
+                              ),
+                            );
+                          },
                         ),
-                        const AppButton(label: 'Loading', loading: true),
-                        const AppButton(
-                          label: 'Disabled',
+                        AppButton(
+                          label: 'Promise',
                           variant: AppButtonVariant.secondary,
+                          onPressed: () {
+                            appGooeyToast.promise(
+                              Future<void>.delayed(const Duration(seconds: 2)),
+                              loading: 'Actualizando cuota...',
+                              success: 'Cuota actualizada',
+                              error: 'No se pudo actualizar',
+                              config: const AppToastConfig(
+                                description: 'Esperando respuesta del equipo',
+                                position: AppToastPosition.bottomCenter,
+                              ),
+                              successDescription: (_) => 'Respuesta confirmada',
+                              errorDescription: (err) => '$err',
+                            );
+                          },
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    Row(
-                      children: [
-                        AppIconButton(
-                          icon: Iconsax.setting_2_copy,
-                          tooltip: 'Configuracion',
-                          onPressed: () {},
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        AppIconButton(
-                          icon: Iconsax.notification_copy,
-                          tooltip: 'Alertas',
-                          filled: true,
-                          onPressed: () {},
-                        ),
-                        const SizedBox(width: AppSpacing.md),
-                        AppSwitch(
-                          value: _switchValue,
-                          onChanged: (next) =>
-                              setState(() => _switchValue = next),
+                        AppButton(
+                          label: 'Dismiss all',
+                          variant: AppButtonVariant.tertiary,
+                          onPressed: () => appGooeyToast.dismissAll(),
                         ),
                       ],
                     ),
@@ -233,49 +313,14 @@ class _MainAppState extends State<MainApp> {
               ),
               const SizedBox(height: AppSpacing.lg),
               AppCard(
-                surfaceLevel: 1,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text('Linear Tabs', style: Theme.of(context).textTheme.titleLarge),
+                    const SizedBox(height: AppSpacing.sm),
                     Text(
-                      'Chips y Estado',
-                      style: Theme.of(context).textTheme.titleLarge,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        AppChip(label: 'Modo Eco', tone: AppChipTone.primary),
-                        AppChip(label: 'PV Online', tone: AppChipTone.success),
-                        AppChip(
-                          label: 'Revisar Red',
-                          tone: AppChipTone.warning,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    const Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        AppStatusBadge(
-                          label: 'Activo',
-                          tone: AppStatusTone.active,
-                        ),
-                        AppStatusBadge(
-                          label: 'En espera',
-                          tone: AppStatusTone.neutral,
-                        ),
-                        AppStatusBadge(
-                          label: 'Advertencia',
-                          tone: AppStatusTone.warning,
-                        ),
-                        AppStatusBadge(
-                          label: 'Error',
-                          tone: AppStatusTone.danger,
-                        ),
-                      ],
+                      'Tab: $_tabIndex | Menú: $_expandedMenuIndex',
+                      style: Theme.of(context).textTheme.bodyMedium,
                     ),
                   ],
                 ),
@@ -300,13 +345,11 @@ class _MainAppState extends State<MainApp> {
                     const SizedBox(height: AppSpacing.md),
                     AppTextField(
                       controller: _quotaController,
-                      label: 'Limite de carga',
+                      label: 'Límite de carga',
                       hintText: '0-100',
                       keyboardType: TextInputType.number,
                       suffixIcon: Iconsax.percentage_square_copy,
-                      errorText: _quotaController.text.isEmpty
-                          ? 'Campo requerido'
-                          : null,
+                      errorText: _quotaController.text.isEmpty ? 'Campo requerido' : null,
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -317,6 +360,16 @@ class _MainAppState extends State<MainApp> {
                         SegmentOption(value: 'Hoy', label: 'Hoy'),
                         SegmentOption(value: 'Semana', label: 'Semana'),
                         SegmentOption(value: 'Mes', label: 'Mes'),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    const Wrap(
+                      spacing: AppSpacing.sm,
+                      runSpacing: AppSpacing.sm,
+                      children: [
+                        AppChip(label: 'Modo Eco', tone: AppChipTone.primary),
+                        AppChip(label: 'PV Online', tone: AppChipTone.success),
+                        AppChip(label: 'Revisar Red', tone: AppChipTone.warning),
                       ],
                     ),
                   ],

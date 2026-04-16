@@ -22,14 +22,15 @@ class AppChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = switch (tone) {
       AppChipTone.neutral => (
         bg: colors.surfaceHigh,
         fg: colors.onSurfaceVariant,
       ),
       AppChipTone.primary => (
-        bg: colors.primaryContainer.withValues(alpha: 0.22),
-        fg: colors.onPrimaryContainer,
+        bg: colors.primaryContainer.withValues(alpha: isDark ? 0.32 : 0.22),
+        fg: colors.primary,
       ),
       AppChipTone.success => (
         bg: colors.secondaryContainer.withValues(alpha: 0.25),
