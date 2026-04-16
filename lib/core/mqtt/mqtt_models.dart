@@ -1,13 +1,6 @@
-enum MqttProtocolVersion {
-  v311,
-  v5,
-}
+enum MqttProtocolVersion { v311, v5 }
 
-enum MqttQosLevel {
-  atMostOnce,
-  atLeastOnce,
-  exactlyOnce,
-}
+enum MqttQosLevel { atMostOnce, atLeastOnce, exactlyOnce }
 
 class MqttClientConfig {
   const MqttClientConfig({
@@ -32,10 +25,7 @@ class MqttClientConfig {
 }
 
 class MqttIncomingMessage {
-  const MqttIncomingMessage({
-    required this.topic,
-    required this.payload,
-  });
+  const MqttIncomingMessage({required this.topic, required this.payload});
 
   final String topic;
   final String payload;
