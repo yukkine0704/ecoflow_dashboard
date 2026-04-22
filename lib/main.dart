@@ -1,6 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:iconsax_flutter/iconsax_flutter.dart';
 
+import 'core/ecoflow/connection_diagnostics_state.dart';
+import 'core/ecoflow/ecoflow_bootstrap_service.dart';
+import 'core/ecoflow/ecoflow_credentials_storage.dart';
+import 'core/ecoflow/ecoflow_models.dart';
+import 'core/ecoflow/ecoflow_realtime_service.dart';
+import 'core/mqtt/mqtt_models.dart';
 import 'design_system/design_system.dart';
 
 void main() {
@@ -19,7 +27,6 @@ class _MainAppState extends State<MainApp> {
   static const double _solarLowThreshold = 400;
 
   ThemeMode _themeMode = ThemeMode.system;
-  bool _switchValue = true;
   String _period = 'Hoy';
   double _solarPower = 840;
   bool _isSolarLow = false;
@@ -30,11 +37,408 @@ class _MainAppState extends State<MainApp> {
   final _nameController = TextEditingController();
   final _quotaController = TextEditingController(text: '80');
 
+  final _accessKeyController = TextEditingController();
+  final _secretKeyController = TextEditingController();
+  final _baseUrlController = TextEditingController(
+    text: 'https://api.ecoflow.com',
+  );
+
+  final EcoFlowCredentialsStorage _credentialsStorage =
+      EcoFlowCredentialsStorage();
+  final List<_DiagnosticLogEntry> _diagnosticLogs = <_DiagnosticLogEntry>[];
+
+  late EcoFlowBootstrapService _bootstrapService;
+  EcoFlowRealtimeService? _realtimeService;
+  StreamSubscription<MqttIncomingMessage>? _realtimeMessagesSub;
+  Timer? _firstMessageTimer;
+
+  ConnectionDiagnosticsState _diagnosticsState =
+      const ConnectionDiagnosticsState.idle();
+  EcoFlowBootstrapBundle? _bootstrapBundle;
+  DateTime? _connectionStartedAt;
+  bool _loadingStoredCredentials = true;
+  bool _connectInProgress = false;
+  bool _protocolRetryDone = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshBootstrapService();
+    unawaited(_loadStoredCredentials());
+  }
+
   @override
   void dispose() {
+    _firstMessageTimer?.cancel();
+    unawaited(_realtimeMessagesSub?.cancel());
+    unawaited(_realtimeService?.dispose() ?? Future<void>.value());
+
     _nameController.dispose();
     _quotaController.dispose();
+    _accessKeyController.dispose();
+    _secretKeyController.dispose();
+    _baseUrlController.dispose();
     super.dispose();
+  }
+
+  void _refreshBootstrapService() {
+    final baseUrl = _baseUrlController.text.trim().isEmpty
+        ? 'https://api.ecoflow.com'
+        : _baseUrlController.text.trim();
+
+    _bootstrapService = EcoFlowBootstrapService(baseUrl: baseUrl);
+  }
+
+  Future<void> _loadStoredCredentials() async {
+    try {
+      final stored = await _credentialsStorage.read();
+      if (!mounted) {
+        return;
+      }
+
+      if (stored != null) {
+        _accessKeyController.text = stored.accessKey;
+        _secretKeyController.text = stored.secretKey;
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      appGooeyToast.warning(
+        'No se pudieron cargar credenciales guardadas',
+        config: const AppToastConfig(meta: 'ECOFLOW AUTH'),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _loadingStoredCredentials = false);
+      }
+    }
+  }
+
+  Future<void> _saveCredentials() async {
+    final credentials = EcoFlowCredentials(
+      accessKey: _accessKeyController.text.trim(),
+      secretKey: _secretKeyController.text.trim(),
+    );
+
+    if (!credentials.isValid) {
+      appGooeyToast.error(
+        'Credenciales incompletas',
+        config: const AppToastConfig(
+          description: 'Ingresa AccessKey y SecretKey',
+          meta: 'ECOFLOW AUTH',
+        ),
+      );
+      return;
+    }
+
+    await _credentialsStorage.write(credentials);
+    if (!mounted) {
+      return;
+    }
+    appGooeyToast.success(
+      'Credenciales guardadas',
+      config: const AppToastConfig(meta: 'ECOFLOW AUTH'),
+    );
+  }
+
+  Future<void> _clearCredentials() async {
+    await _credentialsStorage.clear();
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _accessKeyController.clear();
+      _secretKeyController.clear();
+    });
+
+    appGooeyToast.info(
+      'Credenciales eliminadas',
+      config: const AppToastConfig(meta: 'ECOFLOW AUTH'),
+    );
+  }
+
+  Future<void> _connectEcoFlow() async {
+    if (_connectInProgress) {
+      return;
+    }
+
+    final credentials = EcoFlowCredentials(
+      accessKey: _accessKeyController.text.trim(),
+      secretKey: _secretKeyController.text.trim(),
+    );
+
+    if (!credentials.isValid) {
+      appGooeyToast.error(
+        'Credenciales incompletas',
+        config: const AppToastConfig(
+          description: 'Ingresa AccessKey y SecretKey antes de conectar',
+          meta: 'ECOFLOW AUTH',
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _connectInProgress = true;
+      _diagnosticsState = _diagnosticsState.copyWith(
+        stage: ConnectionStage.authenticating,
+        restHandshakeOk: false,
+        mqttHandshakeOk: false,
+        messagesReceived: 0,
+        clearLastError: true,
+        lastStatusMessage: 'Autenticando con EcoFlow...',
+        clearAttemptedProtocol: true,
+        clearActiveProtocol: true,
+        clearLastMessageAt: true,
+        clearFirstMessageWithinTarget: true,
+      );
+      _diagnosticLogs.clear();
+      _bootstrapBundle = null;
+      _connectionStartedAt = DateTime.now();
+      _protocolRetryDone = false;
+    });
+
+    try {
+      await _credentialsStorage.write(credentials);
+      await _disconnectEcoFlow(showToast: false, resetToIdle: false);
+      _refreshBootstrapService();
+
+      final bundle = await _bootstrapService.bootstrap(credentials);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _bootstrapBundle = bundle;
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.mqttConnecting,
+          restHandshakeOk: true,
+          lastStatusMessage: 'Handshake REST OK. Conectando MQTT...',
+          clearLastError: true,
+        );
+      });
+
+      final realtimeService = EcoFlowRealtimeService(bootstrapBundle: bundle);
+      _realtimeService = realtimeService;
+      _realtimeMessagesSub = realtimeService.messages.listen(
+        _onRealtimeMessage,
+        onError: (Object error) {
+          if (!mounted) {
+            return;
+          }
+          setState(() {
+            _diagnosticsState = _diagnosticsState.copyWith(
+              stage: ConnectionStage.error,
+              lastError: 'Error de stream MQTT: $error',
+            );
+          });
+        },
+      );
+
+      await realtimeService.connectAndSubscribe(includeWildcardTopic: true);
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.streaming,
+          mqttHandshakeOk: true,
+          attemptedProtocol: realtimeService.attemptedProtocol,
+          activeProtocol: realtimeService.activeProtocol,
+          lastStatusMessage: 'MQTT conectado y suscripciones activas.',
+          clearLastError: true,
+        );
+      });
+
+      _armFirstMessageTimer();
+
+      appGooeyToast.success(
+        'Conexión establecida',
+        config: const AppToastConfig(
+          description: 'Escuchando quota/status',
+          meta: 'ECOFLOW MQTT',
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.error,
+          lastError: error.toString(),
+          lastStatusMessage: 'Falló bootstrap o conexión MQTT.',
+        );
+      });
+
+      appGooeyToast.error(
+        'No se pudo conectar',
+        config: AppToastConfig(
+          description: '$error',
+          meta: 'ECOFLOW CONNECT',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _connectInProgress = false);
+      }
+    }
+  }
+
+  Future<void> _disconnectEcoFlow({
+    bool showToast = true,
+    bool resetToIdle = true,
+  }) async {
+    _firstMessageTimer?.cancel();
+    _firstMessageTimer = null;
+
+    await _realtimeMessagesSub?.cancel();
+    _realtimeMessagesSub = null;
+
+    if (_realtimeService != null) {
+      await _realtimeService!.disconnect();
+      await _realtimeService!.dispose();
+      _realtimeService = null;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      if (resetToIdle) {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.idle,
+          mqttHandshakeOk: false,
+          clearAttemptedProtocol: true,
+          clearActiveProtocol: true,
+          lastStatusMessage: 'Desconectado',
+        );
+      }
+    });
+
+    if (showToast) {
+      appGooeyToast.info(
+        'Conexión MQTT cerrada',
+        config: const AppToastConfig(meta: 'ECOFLOW MQTT'),
+      );
+    }
+  }
+
+  void _armFirstMessageTimer() {
+    _firstMessageTimer?.cancel();
+    _firstMessageTimer = Timer(const Duration(seconds: 20), () {
+      if (!mounted) {
+        return;
+      }
+
+      if (_diagnosticsState.stage == ConnectionStage.streaming &&
+          _diagnosticsState.messagesReceived == 0) {
+        if (_diagnosticsState.activeProtocol == 'v5' && !_protocolRetryDone) {
+          unawaited(_retryWithV311());
+          return;
+        }
+
+        setState(() {
+          _diagnosticsState = _diagnosticsState.copyWith(
+            firstMessageWithinTarget: false,
+            lastStatusMessage: 'Conectado, pero no llegó telemetría en 20s.',
+          );
+        });
+      }
+    });
+  }
+
+  Future<void> _retryWithV311() async {
+    final service = _realtimeService;
+    if (service == null || !mounted) {
+      return;
+    }
+
+    _protocolRetryDone = true;
+    setState(() {
+      _diagnosticsState = _diagnosticsState.copyWith(
+        stage: ConnectionStage.retrying,
+        lastStatusMessage: 'Sin tráfico en v5, reintentando con MQTT v3.1.1...',
+        clearLastError: true,
+      );
+    });
+
+    try {
+      await service.connectAndSubscribe(
+        preferredProtocol: MqttProtocolVersion.v311,
+        includeWildcardTopic: true,
+      );
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.streaming,
+          mqttHandshakeOk: true,
+          attemptedProtocol: service.attemptedProtocol,
+          activeProtocol: service.activeProtocol,
+          lastStatusMessage: 'MQTT reestablecido con v3.1.1.',
+          clearLastError: true,
+        );
+      });
+      _armFirstMessageTimer();
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.error,
+          lastError: 'Fallback a v3.1.1 falló: $error',
+        );
+      });
+    }
+  }
+
+  void _onRealtimeMessage(MqttIncomingMessage message) {
+    if (!mounted) {
+      return;
+    }
+
+    final now = DateTime.now();
+    final isFirstMessage = _diagnosticsState.messagesReceived == 0;
+    bool? firstWithinTarget = _diagnosticsState.firstMessageWithinTarget;
+    if (isFirstMessage && _connectionStartedAt != null) {
+      firstWithinTarget =
+          now.difference(_connectionStartedAt!) <= const Duration(seconds: 60);
+      _firstMessageTimer?.cancel();
+      _firstMessageTimer = null;
+    }
+
+    setState(() {
+      _diagnosticLogs.insert(
+        0,
+        _DiagnosticLogEntry(
+          receivedAt: now,
+          topic: message.topic,
+          payload: message.payload,
+        ),
+      );
+      if (_diagnosticLogs.length > 24) {
+        _diagnosticLogs.removeRange(24, _diagnosticLogs.length);
+      }
+
+      _diagnosticsState = _diagnosticsState.copyWith(
+        stage: ConnectionStage.streaming,
+        mqttHandshakeOk: true,
+        messagesReceived: _diagnosticsState.messagesReceived + 1,
+        lastMessageAt: now,
+        firstMessageWithinTarget: firstWithinTarget,
+        lastStatusMessage: 'Streaming activo',
+        clearLastError: true,
+      );
+    });
   }
 
   void _updateSolarPower(double next, BuildContext context) {
@@ -51,7 +455,8 @@ class _MainAppState extends State<MainApp> {
       appGooeyToast.warning(
         'Alerta solar: potencia baja',
         config: AppToastConfig(
-          description: '${clamped.toStringAsFixed(0)}W por debajo de ${_solarLowThreshold.toInt()}W',
+          description:
+              '${clamped.toStringAsFixed(0)}W por debajo de ${_solarLowThreshold.toInt()}W',
           position: AppToastPosition.topCenter,
           meta: 'ECOFLOW',
           showTimestamp: true,
@@ -70,6 +475,262 @@ class _MainAppState extends State<MainApp> {
     }
   }
 
+  AppStatusTone _statusTone(ConnectionStage stage) {
+    return switch (stage) {
+      ConnectionStage.idle => AppStatusTone.neutral,
+      ConnectionStage.authenticating => AppStatusTone.warning,
+      ConnectionStage.mqttConnecting => AppStatusTone.warning,
+      ConnectionStage.retrying => AppStatusTone.warning,
+      ConnectionStage.streaming => AppStatusTone.active,
+      ConnectionStage.error => AppStatusTone.danger,
+    };
+  }
+
+  String _statusLabel(ConnectionStage stage) {
+    return switch (stage) {
+      ConnectionStage.idle => 'Idle',
+      ConnectionStage.authenticating => 'Authenticating',
+      ConnectionStage.mqttConnecting => 'MQTT connecting',
+      ConnectionStage.retrying => 'Retrying',
+      ConnectionStage.streaming => 'Streaming',
+      ConnectionStage.error => 'Error',
+    };
+  }
+
+  Widget _buildDiagnosticsCard(BuildContext context) {
+    final hasBundle = _bootstrapBundle != null;
+
+    return AppCard(
+      surfaceLevel: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'EcoFlow Connection Diagnostics',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              AppStatusBadge(
+                label: _statusLabel(_diagnosticsState.stage),
+                tone: _statusTone(_diagnosticsState.stage),
+              ),
+              AppStatusBadge(
+                label: _diagnosticsState.restHandshakeOk
+                    ? 'REST OK'
+                    : 'REST pending',
+                tone: _diagnosticsState.restHandshakeOk
+                    ? AppStatusTone.active
+                    : AppStatusTone.neutral,
+              ),
+              AppStatusBadge(
+                label: _diagnosticsState.mqttHandshakeOk
+                    ? 'MQTT OK'
+                    : 'MQTT pending',
+                tone: _diagnosticsState.mqttHandshakeOk
+                    ? AppStatusTone.active
+                    : AppStatusTone.neutral,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          if (_loadingStoredCredentials)
+            Text(
+              'Cargando credenciales guardadas...',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          AppTextField(
+            controller: _accessKeyController,
+            label: 'AccessKey',
+            hintText: 'Ingresa tu AccessKey',
+            prefixIcon: Icons.key,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            controller: _secretKeyController,
+            label: 'SecretKey',
+            hintText: 'Ingresa tu SecretKey',
+            obscureText: true,
+            prefixIcon: Icons.security,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppTextField(
+            controller: _baseUrlController,
+            label: 'API Base URL',
+            hintText: 'https://api.ecoflow.com',
+            prefixIcon: Icons.public,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [
+              AppButton(
+                label: 'Guardar',
+                variant: AppButtonVariant.secondary,
+                onPressed: () => _saveCredentials(),
+              ),
+              AppButton(
+                label: _connectInProgress ? 'Conectando...' : 'Conectar',
+                loading: _connectInProgress,
+                onPressed: _connectInProgress ? null : () => _connectEcoFlow(),
+              ),
+              AppButton(
+                label: 'Desconectar',
+                variant: AppButtonVariant.tertiary,
+                onPressed: () => _disconnectEcoFlow(),
+              ),
+              AppButton(
+                label: 'Limpiar credenciales',
+                variant: AppButtonVariant.tertiary,
+                onPressed: () => _clearCredentials(),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Mensajes recibidos: ${_diagnosticsState.messagesReceived}',
+            style: Theme.of(context).textTheme.bodyMedium,
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'Protocolo: ${_diagnosticsState.activeProtocol ?? '-'} (intentado: ${_diagnosticsState.attemptedProtocol ?? '-'})',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          if (_diagnosticsState.lastStatusMessage != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Estado: ${_diagnosticsState.lastStatusMessage}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (_diagnosticsState.lastError != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              'Error: ${_diagnosticsState.lastError}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ],
+          if (_diagnosticsState.firstMessageWithinTarget != null) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(
+              _diagnosticsState.firstMessageWithinTarget!
+                  ? 'Primer mensaje recibido antes de 60s.'
+                  : 'No llegó primer mensaje dentro de 60s.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+          if (hasBundle) ...[
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'SN activo: ${_bootstrapBundle!.device.sn}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'certificateAccount: ${_bootstrapBundle!.certificateAccount}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Broker: ${_bootstrapBundle!.mqtt.host}:${_bootstrapBundle!.mqtt.port}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Topic quota: ${_bootstrapBundle!.quotaTopic}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            Text(
+              'Topic status: ${_bootstrapBundle!.statusTopic}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: AppSpacing.md),
+            Text(
+              'Dispositivos detectados (prueba): ${_bootstrapBundle!.devices.length}',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ..._bootstrapBundle!.devices.map((device) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: AppRadius.md,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Nombre: ${device.displayName}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 2),
+                      SelectableText(
+                        'ID: ${device.deviceId ?? 'N/D'}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 2),
+                      SelectableText(
+                        'SN: ${device.sn}',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+          const SizedBox(height: AppSpacing.md),
+          Text(
+            'Últimos mensajes',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          if (_diagnosticLogs.isEmpty)
+            Text(
+              'Aún no hay mensajes.',
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            ..._diagnosticLogs.take(6).map((entry) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: AppRadius.md,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${entry.receivedAt.toIso8601String()} • ${entry.topic}',
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
+                      const SizedBox(height: 4),
+                      SelectableText(
+                        entry.payload,
+                        maxLines: 4,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -85,43 +746,11 @@ class _MainAppState extends State<MainApp> {
       home: Builder(
         builder: (context) => Scaffold(
           appBar: AppBar(title: const Text('EcoFlow Design System')),
-          bottomNavigationBar: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
-            child: AppLinearBottomTabs(
-              items: const [
-                AppLinearTabItem(icon: Iconsax.home_copy, label: 'Inicio'),
-                AppLinearTabItem(icon: Iconsax.flash_1_copy, label: 'Solar'),
-                AppLinearTabItem(icon: Icons.trending_up, label: 'Pulse'),
-                AppLinearTabItem(icon: Iconsax.setting_2_copy, label: 'Ajustes'),
-              ],
-              selectedIndex: _tabIndex,
-              onTabSelected: (index) => setState(() => _tabIndex = index),
-              expandedItems: const [
-                AppExpandedMenuItem(icon: Iconsax.home_copy, label: 'Home'),
-                AppExpandedMenuItem(icon: Iconsax.message_copy, label: 'Inbox'),
-                AppExpandedMenuItem(icon: Icons.bug_report_outlined, label: 'My Issues'),
-                AppExpandedMenuItem(icon: Iconsax.flash_1_copy, label: 'Pulse'),
-                AppExpandedMenuItem(icon: Iconsax.document_copy, label: 'View'),
-                AppExpandedMenuItem(icon: Icons.rocket_launch_outlined, label: 'Initiatives'),
-                AppExpandedMenuItem(icon: Icons.inventory_2_outlined, label: 'Projects'),
-                AppExpandedMenuItem(icon: Iconsax.setting_copy, label: 'Settings'),
-              ],
-              onExpandedItemSelected: (index) {
-                setState(() => _expandedMenuIndex = index);
-                appGooeyToast.info(
-                  'Menú seleccionado',
-                  config: AppToastConfig(
-                    description: 'Ítem #${index + 1}',
-                    meta: 'LINEAR TABS',
-                    duration: const Duration(milliseconds: 2400),
-                  ),
-                );
-              },
-            ),
-          ),
           body: ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 180),
             children: [
+              _buildDiagnosticsCard(context),
+              const SizedBox(height: AppSpacing.lg),
               AppCard(
                 surfaceLevel: 1,
                 child: Column(
@@ -316,7 +945,10 @@ class _MainAppState extends State<MainApp> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Linear Tabs', style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      'Linear Tabs',
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: AppSpacing.sm),
                     Text(
                       'Tab: $_tabIndex | Menú: $_expandedMenuIndex',
@@ -349,7 +981,8 @@ class _MainAppState extends State<MainApp> {
                       hintText: '0-100',
                       keyboardType: TextInputType.number,
                       suffixIcon: Iconsax.percentage_square_copy,
-                      errorText: _quotaController.text.isEmpty ? 'Campo requerido' : null,
+                      errorText:
+                          _quotaController.text.isEmpty ? 'Campo requerido' : null,
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: AppSpacing.lg),
@@ -381,4 +1014,16 @@ class _MainAppState extends State<MainApp> {
       ),
     );
   }
+}
+
+class _DiagnosticLogEntry {
+  const _DiagnosticLogEntry({
+    required this.receivedAt,
+    required this.topic,
+    required this.payload,
+  });
+
+  final DateTime receivedAt;
+  final String topic;
+  final String payload;
 }

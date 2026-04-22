@@ -10,6 +10,7 @@ class MqttV311TelemetryClient implements MqttTelemetryClient {
   MqttV311TelemetryClient(this.config)
     : _client = m3.MqttServerClient(config.host, config.clientId) {
     _client.port = config.port;
+    _setSecureIfSupported(config.useTls);
     _client.autoReconnect = config.autoReconnect;
     _client.resubscribeOnAutoReconnect = true;
     _client.keepAlivePeriod = config.keepAliveSeconds;
@@ -89,6 +90,15 @@ class MqttV311TelemetryClient implements MqttTelemetryClient {
     unawaited(_updatesSubscription?.cancel());
     disconnect();
     unawaited(_messagesController.close());
+  }
+
+  void _setSecureIfSupported(bool useTls) {
+    try {
+      final dynamic dynamicClient = _client;
+      dynamicClient.secure = useTls;
+    } catch (_) {
+      // Some client builds may not expose `secure`; ignore gracefully.
+    }
   }
 
   m3.MqttQos _toQos(MqttQosLevel qos) {

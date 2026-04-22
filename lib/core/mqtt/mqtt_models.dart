@@ -9,6 +9,7 @@ class MqttClientConfig {
     this.port = 1883,
     this.username,
     this.password,
+    this.useTls = false,
     this.keepAliveSeconds = 30,
     this.autoReconnect = true,
     this.protocol = MqttProtocolVersion.v5,
@@ -19,6 +20,7 @@ class MqttClientConfig {
   final int port;
   final String? username;
   final String? password;
+  final bool useTls;
   final int keepAliveSeconds;
   final bool autoReconnect;
   final MqttProtocolVersion protocol;
