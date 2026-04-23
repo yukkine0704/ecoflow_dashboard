@@ -58,7 +58,9 @@ class _MainAppState extends State<MainApp> {
   DateTime? _connectionStartedAt;
   bool _loadingStoredCredentials = true;
   bool _connectInProgress = false;
+  bool _deviceSwitchInProgress = false;
   bool _protocolRetryDone = false;
+  String? _selectedDeviceSn;
 
   @override
   void initState() {
@@ -196,6 +198,7 @@ class _MainAppState extends State<MainApp> {
       );
       _diagnosticLogs.clear();
       _bootstrapBundle = null;
+      _selectedDeviceSn = null;
       _connectionStartedAt = DateTime.now();
       _protocolRetryDone = false;
     });
@@ -222,20 +225,7 @@ class _MainAppState extends State<MainApp> {
 
       final realtimeService = EcoFlowRealtimeService(bootstrapBundle: bundle);
       _realtimeService = realtimeService;
-      _realtimeMessagesSub = realtimeService.messages.listen(
-        _onRealtimeMessage,
-        onError: (Object error) {
-          if (!mounted) {
-            return;
-          }
-          setState(() {
-            _diagnosticsState = _diagnosticsState.copyWith(
-              stage: ConnectionStage.error,
-              lastError: 'Error de stream MQTT: $error',
-            );
-          });
-        },
-      );
+      _attachRealtimeListener(realtimeService);
 
       await realtimeService.connectAndSubscribe(includeWildcardTopic: true);
       if (!mounted) {
@@ -243,6 +233,7 @@ class _MainAppState extends State<MainApp> {
       }
 
       setState(() {
+        _selectedDeviceSn = bundle.device.sn;
         _diagnosticsState = _diagnosticsState.copyWith(
           stage: ConnectionStage.streaming,
           mqttHandshakeOk: true,
@@ -318,6 +309,7 @@ class _MainAppState extends State<MainApp> {
           clearActiveProtocol: true,
           lastStatusMessage: 'Desconectado',
         );
+        _selectedDeviceSn = null;
       }
     });
 
@@ -398,6 +390,154 @@ class _MainAppState extends State<MainApp> {
           lastError: 'Fallback a v3.1.1 falló: $error',
         );
       });
+    }
+  }
+
+  void _attachRealtimeListener(EcoFlowRealtimeService realtimeService) {
+    _realtimeMessagesSub = realtimeService.messages.listen(
+      _onRealtimeMessage,
+      onError: (Object error) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _diagnosticsState = _diagnosticsState.copyWith(
+            stage: ConnectionStage.error,
+            lastError: 'Error de stream MQTT: $error',
+          );
+        });
+      },
+    );
+  }
+
+  EcoFlowBootstrapBundle _withActiveDevice(
+    EcoFlowBootstrapBundle bundle,
+    EcoFlowDeviceIdentity device,
+  ) {
+    return EcoFlowBootstrapBundle(
+      mqtt: bundle.mqtt,
+      device: device,
+      devices: bundle.devices,
+      certificateAccount: bundle.certificateAccount,
+      mqttEndpointUsed: bundle.mqttEndpointUsed,
+      deviceEndpointUsed: bundle.deviceEndpointUsed,
+    );
+  }
+
+  Future<void> _selectActiveDevice(String? sn) async {
+    final bundle = _bootstrapBundle;
+    if (bundle == null || sn == null) {
+      return;
+    }
+    if (_connectInProgress || _deviceSwitchInProgress || sn == bundle.device.sn) {
+      return;
+    }
+
+    EcoFlowDeviceIdentity? targetDevice;
+    for (final device in bundle.devices) {
+      if (device.sn == sn) {
+        targetDevice = device;
+        break;
+      }
+    }
+
+    if (targetDevice == null) {
+      appGooeyToast.warning(
+        'No se encontró ese dispositivo en la lista',
+        config: const AppToastConfig(meta: 'ECOFLOW DEVICE'),
+      );
+      return;
+    }
+
+    final nextBundle = _withActiveDevice(bundle, targetDevice);
+    final wasConnected = _realtimeService != null;
+
+    setState(() {
+      _bootstrapBundle = nextBundle;
+      _selectedDeviceSn = targetDevice!.sn;
+      _diagnosticsState = _diagnosticsState.copyWith(
+        lastStatusMessage: wasConnected
+            ? 'Cambiando dispositivo activo...'
+            : 'Dispositivo activo actualizado (sin conexión MQTT).',
+      );
+    });
+
+    if (!wasConnected) {
+      appGooeyToast.info(
+        'Dispositivo activo: ${targetDevice.displayName}',
+        config: const AppToastConfig(meta: 'ECOFLOW DEVICE'),
+      );
+      return;
+    }
+
+    setState(() {
+      _deviceSwitchInProgress = true;
+      _diagnosticsState = _diagnosticsState.copyWith(
+        stage: ConnectionStage.mqttConnecting,
+        mqttHandshakeOk: false,
+        clearLastError: true,
+      );
+    });
+
+    try {
+      _firstMessageTimer?.cancel();
+      _firstMessageTimer = null;
+
+      await _realtimeMessagesSub?.cancel();
+      _realtimeMessagesSub = null;
+
+      await _realtimeService?.disconnect();
+      await _realtimeService?.dispose();
+
+      final realtimeService = EcoFlowRealtimeService(bootstrapBundle: nextBundle);
+      _realtimeService = realtimeService;
+      _attachRealtimeListener(realtimeService);
+      await realtimeService.connectAndSubscribe(includeWildcardTopic: true);
+
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.streaming,
+          mqttHandshakeOk: true,
+          attemptedProtocol: realtimeService.attemptedProtocol,
+          activeProtocol: realtimeService.activeProtocol,
+          lastStatusMessage:
+              'Dispositivo activo cambiado a ${targetDevice!.displayName}.',
+          clearLastError: true,
+        );
+      });
+      _armFirstMessageTimer();
+
+      appGooeyToast.success(
+        'Dispositivo activo actualizado',
+        config: AppToastConfig(
+          description: '${targetDevice.displayName} • ${targetDevice.sn}',
+          meta: 'ECOFLOW DEVICE',
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _diagnosticsState = _diagnosticsState.copyWith(
+          stage: ConnectionStage.error,
+          lastError: 'No se pudo reconectar con el nuevo dispositivo: $error',
+        );
+      });
+      appGooeyToast.error(
+        'Falló cambio de dispositivo',
+        config: AppToastConfig(
+          description: '$error',
+          meta: 'ECOFLOW DEVICE',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _deviceSwitchInProgress = false);
+      }
     }
   }
 
@@ -626,6 +766,30 @@ class _MainAppState extends State<MainApp> {
             ),
           ],
           if (hasBundle) ...[
+            const SizedBox(height: AppSpacing.md),
+            DropdownButtonFormField<String>(
+              value: _selectedDeviceSn ?? _bootstrapBundle!.device.sn,
+              decoration: const InputDecoration(
+                labelText: 'Dispositivo activo',
+                border: OutlineInputBorder(),
+              ),
+              items: _bootstrapBundle!.devices.map((device) {
+                return DropdownMenuItem<String>(
+                  value: device.sn,
+                  child: Text('${device.displayName} (${device.sn})'),
+                );
+              }).toList(),
+              onChanged: (_connectInProgress || _deviceSwitchInProgress)
+                  ? null
+                  : (sn) => unawaited(_selectActiveDevice(sn)),
+            ),
+            if (_deviceSwitchInProgress) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                'Cambiando dispositivo y reconectando MQTT...',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ],
             const SizedBox(height: AppSpacing.md),
             Text(
               'SN activo: ${_bootstrapBundle!.device.sn}',
