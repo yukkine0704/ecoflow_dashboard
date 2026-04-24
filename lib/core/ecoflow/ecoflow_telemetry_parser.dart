@@ -59,6 +59,43 @@ class EcoFlowTelemetryParser {
     return null;
   }
 
+  static Map<String, dynamic>? inspectProtobufFrame(List<int>? rawPayloadBytes) {
+    if (rawPayloadBytes == null || rawPayloadBytes.isEmpty) {
+      return null;
+    }
+    final bytes = rawPayloadBytes;
+    final headers = _extractHeaderMessages(bytes);
+    if (headers.isEmpty) {
+      return null;
+    }
+    final out = <String, dynamic>{
+      'headerCount': headers.length,
+      'headers': <Map<String, dynamic>>[],
+    };
+    final headerOut = out['headers'] as List<Map<String, dynamic>>;
+    for (final headerBytes in headers) {
+      final envelope = _parseHeaderEnvelope(headerBytes);
+      final pdata = envelope.pdata ?? const <int>[];
+      final info = <String, dynamic>{
+        'cmdFunc': envelope.cmdFunc,
+        'cmdId': envelope.cmdId,
+        'encType': envelope.encType,
+        'seq': envelope.seq,
+        'dataLen': envelope.dataLen,
+        'pdataLen': pdata.length,
+        'pdataHexPreview': _hexPreview(pdata, limit: 64),
+        'pdataAsciiPreview': _asciiPreview(pdata, limit: 64),
+      };
+      if (envelope.encType == 1 && envelope.seq != 0 && pdata.isNotEmpty) {
+        final xor = _xorWithSeqByte(pdata, envelope.seq);
+        info['xorHexPreview'] = _hexPreview(xor, limit: 64);
+        info['xorAsciiPreview'] = _asciiPreview(xor, limit: 64);
+      }
+      headerOut.add(info);
+    }
+    return out;
+  }
+
   static Map<String, dynamic>? _decodeJsonMap(String payloadRaw) {
     final trimmed = payloadRaw.trim();
     if (trimmed.isEmpty) {
@@ -88,7 +125,10 @@ class EcoFlowTelemetryParser {
   }
 
   static Map<String, dynamic>? _decodeProtobufPayload(List<int> bytes) {
-    final headers = _extractHeaderMessages(bytes);
+    var headers = _extractHeaderMessages(bytes);
+    if (headers.isEmpty) {
+      headers = _scanLikelyHeaderMessages(bytes);
+    }
     if (headers.isEmpty) {
       return null;
     }
@@ -105,15 +145,13 @@ class EcoFlowTelemetryParser {
     if (merged.isNotEmpty) {
       return merged;
     }
-    final numericFallback = _extractNumericTelemetryFromBytes(bytes);
-    if (numericFallback.isNotEmpty) {
-      return numericFallback;
+
+    final embeddedJson = _tryDecodeJsonSubstringFromBytes(bytes);
+    if (embeddedJson != null) {
+      return embeddedJson;
     }
-    return <String, dynamic>{
-      '_format': 'protobuf_unparsed',
-      '_headerCount': headers.length,
-      '_rawHexPreview': _hexPreview(bytes),
-    };
+
+    return null;
   }
 
   static List<List<int>> _extractHeaderMessages(List<int> bytes) {
@@ -156,17 +194,46 @@ class EcoFlowTelemetryParser {
       return null;
     }
 
-    return _decodePdataToMap(
+    final decoded = _decodePdataToMap(
       pdata: envelope.pdata!,
       encType: envelope.encType,
       seq: envelope.seq,
     );
+    if (decoded != null && decoded.isNotEmpty) {
+      return decoded;
+    }
+
+    // These frames are frequent control/ack packets in app MQTT and tend to
+    // produce noisy numeric candidates rather than stable telemetry.
+    if (envelope.cmdFunc == 254 && envelope.cmdId == 21) {
+      return null;
+    }
+
+    final numeric = _extractNumericTelemetryFromBytes(envelope.pdata!);
+    if (numeric.isEmpty) {
+      return null;
+    }
+
+    // cmdId=50 tends to be fuller state snapshots; cmdId=2 is often partial.
+    // Keep SOC from partial packets but avoid unstable online flips.
+    if (envelope.cmdId != 50) {
+      numeric.remove('online');
+    }
+
+    numeric['_cmdFunc'] = envelope.cmdFunc;
+    numeric['_cmdId'] = envelope.cmdId;
+    numeric['_encType'] = envelope.encType;
+    numeric['_seq'] = envelope.seq;
+    return numeric;
   }
 
   static _HeaderEnvelope _parseHeaderEnvelope(List<int> headerBytes) {
     List<int>? pdata;
     var encType = 0;
     var seq = 0;
+    var cmdFunc = 0;
+    var cmdId = 0;
+    var dataLen = 0;
 
     var offset = 0;
     while (offset < headerBytes.length) {
@@ -193,7 +260,8 @@ class EcoFlowTelemetryParser {
         continue;
       }
 
-      if (wireType == 0 && (field == 6 || field == 14)) {
+      if (wireType == 0 &&
+          (field == 6 || field == 8 || field == 9 || field == 10 || field == 14)) {
         final value = _readVarint(headerBytes, offset);
         if (value == null) {
           break;
@@ -201,6 +269,12 @@ class EcoFlowTelemetryParser {
         offset = value.nextOffset;
         if (field == 6) {
           encType = value.value;
+        } else if (field == 8) {
+          cmdFunc = value.value;
+        } else if (field == 9) {
+          cmdId = value.value;
+        } else if (field == 10) {
+          dataLen = value.value;
         } else if (field == 14) {
           seq = value.value;
         }
@@ -217,6 +291,9 @@ class EcoFlowTelemetryParser {
       pdata: pdata,
       encType: encType,
       seq: seq,
+      cmdFunc: cmdFunc,
+      cmdId: cmdId,
+      dataLen: dataLen,
     );
   }
 
@@ -234,6 +311,10 @@ class EcoFlowTelemetryParser {
     if (directJson != null) {
       return directJson;
     }
+    final directEmbeddedJson = _tryDecodeJsonSubstringFromBytes(pdata);
+    if (directEmbeddedJson != null) {
+      return directEmbeddedJson;
+    }
 
     if (encType == 1 && seq != 0) {
       final xorBySeq = _xorWithSeqByte(pdata, seq);
@@ -241,9 +322,82 @@ class EcoFlowTelemetryParser {
       if (xorBySeqJson != null) {
         return xorBySeqJson;
       }
+      final xorEmbeddedJson = _tryDecodeJsonSubstringFromBytes(xorBySeq);
+      if (xorEmbeddedJson != null) {
+        return xorEmbeddedJson;
+      }
+
+      final seqBytes = <int>[
+        seq & 0xFF,
+        (seq >> 8) & 0xFF,
+        (seq >> 16) & 0xFF,
+        (seq >> 24) & 0xFF,
+      ];
+      final xorBySeqBytes = _xorWithRepeatingKey(pdata, seqBytes);
+      final xorBySeqBytesJson = _tryDecodeJsonFromBytes(xorBySeqBytes);
+      if (xorBySeqBytesJson != null) {
+        return xorBySeqBytesJson;
+      }
+      final xorBySeqBytesEmbedded =
+          _tryDecodeJsonSubstringFromBytes(xorBySeqBytes);
+      if (xorBySeqBytesEmbedded != null) {
+        return xorBySeqBytesEmbedded;
+      }
     }
 
     return null;
+  }
+
+  static List<int> _xorWithRepeatingKey(List<int> input, List<int> keyBytes) {
+    if (input.isEmpty || keyBytes.isEmpty) {
+      return input;
+    }
+    final out = List<int>.filled(input.length, 0);
+    for (var i = 0; i < input.length; i++) {
+      out[i] = input[i] ^ keyBytes[i % keyBytes.length];
+    }
+    return out;
+  }
+
+  static List<List<int>> _scanLikelyHeaderMessages(List<int> bytes) {
+    final headers = <List<int>>[];
+    for (var i = 0; i < bytes.length - 2; i++) {
+      if (bytes[i] != 0x0A) {
+        continue;
+      }
+      final lengthValue = _readVarint(bytes, i + 1);
+      if (lengthValue == null) {
+        continue;
+      }
+      final length = lengthValue.value;
+      if (length <= 0) {
+        continue;
+      }
+      final start = lengthValue.nextOffset;
+      final end = start + length;
+      if (end > bytes.length) {
+        continue;
+      }
+      headers.add(bytes.sublist(start, end));
+    }
+    return headers;
+  }
+
+  static Map<String, dynamic>? _tryDecodeJsonSubstringFromBytes(List<int> bytes) {
+    if (bytes.isEmpty) {
+      return null;
+    }
+    final start = bytes.indexOf(0x7B); // {
+    final end = bytes.lastIndexOf(0x7D); // }
+    if (start < 0 || end < 0 || end <= start) {
+      return null;
+    }
+    try {
+      final text = utf8.decode(bytes.sublist(start, end + 1));
+      return _decodeJsonMap(text);
+    } catch (_) {
+      return null;
+    }
   }
 
   static String _hexPreview(List<int> bytes, {int limit = 64}) {
@@ -252,6 +406,20 @@ class EcoFlowTelemetryParser {
         .take(max)
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
         .join();
+  }
+
+  static String _asciiPreview(List<int> bytes, {int limit = 64}) {
+    final max = bytes.length < limit ? bytes.length : limit;
+    final buffer = StringBuffer();
+    for (var i = 0; i < max; i++) {
+      final b = bytes[i];
+      if (b >= 32 && b <= 126) {
+        buffer.writeCharCode(b);
+      } else {
+        buffer.write('.');
+      }
+    }
+    return buffer.toString();
   }
 
   static Map<String, dynamic> _extractNumericTelemetryFromBytes(List<int> bytes) {
@@ -271,8 +439,13 @@ class EcoFlowTelemetryParser {
 
     final batteryCandidate = _pickBatteryCandidate(varints, fixed32s);
     final onlineCandidate = _pickOnlineCandidate(varints);
+    final estimatedPower = _pickEstimatedPowers(varints);
+    final estimatedTemp = _pickEstimatedTemperature(varints, fixed32s);
 
-    if (batteryCandidate == null && onlineCandidate == null) {
+    if (batteryCandidate == null &&
+        onlineCandidate == null &&
+        estimatedPower == null &&
+        estimatedTemp == null) {
       return const <String, dynamic>{};
     }
 
@@ -288,6 +461,17 @@ class EcoFlowTelemetryParser {
     }
     if (onlineCandidate != null) {
       out['online'] = onlineCandidate ? 1 : 0;
+    }
+    if (estimatedPower != null) {
+      if (estimatedPower.inputW != null) {
+        out['inPower'] = estimatedPower.inputW;
+      }
+      if (estimatedPower.outputW != null) {
+        out['outPower'] = estimatedPower.outputW;
+      }
+    }
+    if (estimatedTemp != null) {
+      out['temp'] = estimatedTemp;
     }
     return out;
   }
@@ -381,6 +565,11 @@ class EcoFlowTelemetryParser {
     List<_NumericFieldEntry> varints,
     List<_NumericFieldEntry> fixed32s,
   ) {
+    final nestedPriority = _pickNestedBatteryCandidate(varints);
+    if (nestedPriority != null) {
+      return nestedPriority;
+    }
+
     const preferredVarintFields = <int>[10, 9, 11, 12, 7, 6, 8];
     for (final field in preferredVarintFields) {
       final candidate = varints
@@ -425,6 +614,35 @@ class EcoFlowTelemetryParser {
     return null;
   }
 
+  static _BatteryCandidate? _pickNestedBatteryCandidate(
+    List<_NumericFieldEntry> varints,
+  ) {
+    bool inPrimaryNested(_NumericFieldEntry e) =>
+        e.path.length >= 2 && e.path[e.path.length - 2] == 1;
+
+    final orderedFields = <int>[9, 7, 10, 11];
+    for (final field in orderedFields) {
+      final match = varints.where((e) {
+        if (!inPrimaryNested(e)) {
+          return false;
+        }
+        if (e.field != field) {
+          return false;
+        }
+        return e.value >= 6 && e.value <= 100;
+      }).toList();
+      if (match.isNotEmpty) {
+        final picked = match.last.value.round();
+        return _BatteryCandidate(
+          value: picked,
+          field: field,
+          confidence: field == 9 ? 'high' : 'medium',
+        );
+      }
+    }
+    return null;
+  }
+
   static bool? _pickOnlineCandidate(List<_NumericFieldEntry> varints) {
     const preferredFields = <int>[2, 3, 4, 6, 16, 17];
     for (final field in preferredFields) {
@@ -438,6 +656,42 @@ class EcoFlowTelemetryParser {
       }
       if (value == 1 || value == 2) {
         return true;
+      }
+    }
+    return null;
+  }
+
+  static _EstimatedPower? _pickEstimatedPowers(List<_NumericFieldEntry> varints) {
+    final milliWatts = varints
+        .where((e) => e.value >= 1000 && e.value <= 200000)
+        .map((e) => e.value)
+        .toList()
+      ..sort();
+
+    if (milliWatts.isEmpty) {
+      return null;
+    }
+
+    final outputW = milliWatts.last / 1000.0;
+    final inputW = milliWatts.length >= 2 ? milliWatts[milliWatts.length - 2] / 1000.0 : null;
+    return _EstimatedPower(inputW: inputW, outputW: outputW);
+  }
+
+  static double? _pickEstimatedTemperature(
+    List<_NumericFieldEntry> varints,
+    List<_NumericFieldEntry> fixed32s,
+  ) {
+    for (final entry in fixed32s) {
+      final asFloat = _floatFromUint32(entry.value.toInt());
+      if (asFloat != null && asFloat >= -30 && asFloat <= 100) {
+        return asFloat;
+      }
+    }
+
+    for (final entry in varints) {
+      final value = entry.value;
+      if (value >= 15 && value <= 80) {
+        return value;
       }
     }
     return null;
@@ -650,9 +904,22 @@ class _HeaderEnvelope {
     required this.pdata,
     required this.encType,
     required this.seq,
+    required this.cmdFunc,
+    required this.cmdId,
+    required this.dataLen,
   });
 
   final List<int>? pdata;
   final int encType;
   final int seq;
+  final int cmdFunc;
+  final int cmdId;
+  final int dataLen;
+}
+
+class _EstimatedPower {
+  const _EstimatedPower({required this.inputW, required this.outputW});
+
+  final double? inputW;
+  final double? outputW;
 }

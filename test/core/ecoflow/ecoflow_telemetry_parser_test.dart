@@ -59,16 +59,17 @@ void main() {
       expect(parsed.online, isFalse);
     });
 
-    test('falls back to numeric protobuf extraction when json is absent', () {
+    test('ignores protobuf payload when no json params are present', () {
       final bytes = _buildNestedNumericSample();
       final parsed = EcoFlowTelemetryParser.parseMessagePayload(
         '',
         rawPayloadBytes: bytes,
       );
 
-      expect(parsed.payload?['_format'], 'protobuf_numeric');
-      expect(parsed.batteryPercent, 95);
-      expect(parsed.online, isTrue);
+      expect(parsed.payload, isNull);
+      expect(parsed.params, isNull);
+      expect(parsed.batteryPercent, isNull);
+      expect(parsed.online, isNull);
     });
   });
 }

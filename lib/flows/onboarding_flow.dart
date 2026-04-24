@@ -578,8 +578,15 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
             'sessionToken': sessionToken,
             'topic': message.topic,
             'rawPayloadLength': message.rawPayloadBytes?.length ?? 0,
+            'rawPayloadHexPreview': _hexPreview(message.rawPayloadBytes),
+            'rawPayloadHex': _fullHexIfNeeded(
+              bytes: message.rawPayloadBytes,
+              parsedParams: parsed.params,
+            ),
             'raw': EcoFlowTelemetryParser.redactPayload(parsed.payload),
             'params': EcoFlowTelemetryParser.redactPayload(parsed.params),
+            if (parsed.params == null)
+              'protoInspect': _inspectProtobufFrame(message.rawPayloadBytes),
             'batteryPercent': parsed.batteryPercent,
             'online': parsed.online,
           },
@@ -838,13 +845,19 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
 
     final delta = (candidate - currentBattery).abs();
     final isLargeDrop = candidate <= 25 && currentBattery >= 40;
-    final fieldLooksNoisy = socField == 9;
+    final fieldLooksNoisy = socField == 10;
     final lowConfidence = confidence == 'low';
     final mediumConfidence = confidence == 'medium';
+    final cmdId = _asInt(params?['_cmdId']);
+    final likelySummaryFrame = cmdId == 50;
 
     // Keep a previously stable value when a noisy frame suddenly reports
     // a very low SOC (common in non-primary protobuf frames).
     if ((fieldLooksNoisy && delta >= 20 && isLargeDrop) ||
+        (likelySummaryFrame &&
+            fieldLooksNoisy &&
+            currentBattery >= 80 &&
+            candidate <= 60) ||
         (lowConfidence && delta >= 15) ||
         (mediumConfidence && delta >= 45 && isLargeDrop)) {
       _log(
@@ -877,6 +890,158 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     return null;
   }
 
+  String _hexPreview(List<int>? bytes, {int limit = 32}) {
+    if (bytes == null || bytes.isEmpty) {
+      return '';
+    }
+    final max = bytes.length < limit ? bytes.length : limit;
+    return bytes
+        .take(max)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+  }
+
+  String? _fullHexIfNeeded({
+    required List<int>? bytes,
+    required Map<String, dynamic>? parsedParams,
+  }) {
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+    if (parsedParams != null && parsedParams.isNotEmpty) {
+      return null;
+    }
+    final buffer = StringBuffer();
+    for (final b in bytes) {
+      buffer.write(b.toRadixString(16).padLeft(2, '0'));
+    }
+    return buffer.toString();
+  }
+
+  Map<String, dynamic>? _inspectProtobufFrame(List<int>? bytes) {
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+    if (bytes.first != 0x0A) {
+      return <String, dynamic>{
+        'format': 'non_header_message',
+        'rawPayloadHexPreview': _hexPreview(bytes, limit: 64),
+      };
+    }
+
+    final lengthRead = _readVarint(bytes, 1);
+    if (lengthRead == null) {
+      return <String, dynamic>{
+        'format': 'invalid_varint',
+        'rawPayloadHexPreview': _hexPreview(bytes, limit: 64),
+      };
+    }
+
+    final headerLen = lengthRead.$1;
+    final headerStart = lengthRead.$2;
+    final headerEnd = headerStart + headerLen;
+    if (headerLen <= 0 || headerEnd > bytes.length) {
+      return <String, dynamic>{
+        'format': 'invalid_header_len',
+        'headerLen': headerLen,
+        'rawPayloadHexPreview': _hexPreview(bytes, limit: 64),
+      };
+    }
+
+    final header = bytes.sublist(headerStart, headerEnd);
+    final info = <String, dynamic>{
+      'headerLen': headerLen,
+      'headerHexPreview': _hexPreview(header, limit: 64),
+      'encType': 0,
+      'seq': 0,
+      'cmdFunc': 0,
+      'cmdId': 0,
+      'dataLen': 0,
+      'pdataLen': 0,
+      'pdataHexPreview': '',
+    };
+
+    var offset = 0;
+    while (offset < header.length) {
+      final tagRead = _readVarint(header, offset);
+      if (tagRead == null) {
+        break;
+      }
+      final tag = tagRead.$1;
+      offset = tagRead.$2;
+      final field = tag >> 3;
+      final wireType = tag & 0x07;
+
+      if (wireType == 2) {
+        final lenRead = _readVarint(header, offset);
+        if (lenRead == null) {
+          break;
+        }
+        final len = lenRead.$1;
+        offset = lenRead.$2;
+        if (len < 0 || offset + len > header.length) {
+          break;
+        }
+        final value = header.sublist(offset, offset + len);
+        offset += len;
+        if (field == 1) {
+          info['pdataLen'] = value.length;
+          info['pdataHexPreview'] = _hexPreview(value, limit: 64);
+        }
+        continue;
+      }
+
+      if (wireType == 0) {
+        final valueRead = _readVarint(header, offset);
+        if (valueRead == null) {
+          break;
+        }
+        final value = valueRead.$1;
+        offset = valueRead.$2;
+        if (field == 6) info['encType'] = value;
+        if (field == 8) info['cmdFunc'] = value;
+        if (field == 9) info['cmdId'] = value;
+        if (field == 10) info['dataLen'] = value;
+        if (field == 14) info['seq'] = value;
+        continue;
+      }
+
+      if (wireType == 5) {
+        if (offset + 4 > header.length) {
+          break;
+        }
+        offset += 4;
+        continue;
+      }
+      if (wireType == 1) {
+        if (offset + 8 > header.length) {
+          break;
+        }
+        offset += 8;
+        continue;
+      }
+      break;
+    }
+
+    return info;
+  }
+
+  (int, int)? _readVarint(List<int> bytes, int offset) {
+    var result = 0;
+    var shift = 0;
+    var index = offset;
+    while (index < bytes.length && shift <= 63) {
+      final byte = bytes[index];
+      result |= (byte & 0x7F) << shift;
+      index += 1;
+      if ((byte & 0x80) == 0) {
+        return (result, index);
+      }
+      shift += 7;
+    }
+    return null;
+  }
+
   Future<void> _disposeSelectorRealtime() async {
     _stopAppMqttCommandLoop();
     _stopFallbackRestPolling(resetAttempt: true);
@@ -891,15 +1056,31 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   }
 
   String? _extractSnFromTopic(String topic) {
-    final parts = topic.split('/');
-    if (parts.length < 2) {
+    final parts = topic.split('/').where((part) => part.isNotEmpty).toList();
+    if (parts.isEmpty) {
       return null;
     }
+
+    // App MQTT topic: /app/device/property/{sn}
+    if (parts.length >= 4 &&
+        parts[0] == 'app' &&
+        parts[1] == 'device' &&
+        parts[2] == 'property') {
+      final sn = parts[3].trim();
+      return sn.isEmpty ? null : sn;
+    }
+
+    // Open MQTT topics:
+    // /open/{certificateAccount}/{sn}/quota
+    // /open/{certificateAccount}/{sn}/status
+    // /open/{certificateAccount}/{sn}/set_reply
+    if (parts.length >= 4 && parts[0] == 'open') {
+      final sn = parts[2].trim();
+      return sn.isEmpty ? null : sn;
+    }
+
     final sn = parts.last.trim();
-    if (sn.isEmpty) {
-      return null;
-    }
-    return sn;
+    return sn.isEmpty ? null : sn;
   }
 
   void _startAppMqttCommandLoop({

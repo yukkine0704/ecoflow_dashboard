@@ -20,10 +20,7 @@ class EcoFlowSignedHeadersFactory {
     final safeAccessKey = accessKey.trim();
     final safeSecretKey = secretKey.trim();
     final safeNonce = nonce ?? _createNonce();
-    final safeTimestamp =
-        (timestampMillis ??
-                (DateTime.now().microsecondsSinceEpoch * 1000))
-            .toString();
+    final safeTimestamp = (timestampMillis ?? _timestampUnixNano()).toString();
 
     final queryString = _generateQueryParams(params);
     final baseString = _buildSignBaseString(
@@ -103,11 +100,21 @@ class EcoFlowSignedHeadersFactory {
       return result;
     }
 
-    result.add('$prefix=${_stringifyValue(value)}');
+    final stringValue = _stringifyValue(value);
+    if (stringValue == null) {
+      return result;
+    }
+    result.add('$prefix=$stringValue');
     return result;
   }
 
-  String _stringifyValue(Object value) {
+  String? _stringifyValue(Object value) {
+    if (value is int) {
+      return value.toString();
+    }
+    if (value is String) {
+      return value;
+    }
     if (value is bool) {
       return value ? 'true' : 'false';
     }
@@ -117,6 +124,8 @@ class EcoFlowSignedHeadersFactory {
       }
       return value.toString();
     }
-    return value.toString();
+    return null;
   }
+
+  int _timestampUnixNano() => DateTime.now().microsecondsSinceEpoch * 1000;
 }
