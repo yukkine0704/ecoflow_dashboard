@@ -62,6 +62,7 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     });
   }
 
+  @override
   void updateToast(
     String id, {
     String? title,
@@ -88,6 +89,7 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     });
   }
 
+  @override
   void dismissToast(String id) {
     _timers[id]?.cancel();
     _timers.remove(id);
@@ -97,6 +99,7 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     });
   }
 
+  @override
   void dismissAllToasts() {
     for (final timer in _timers.values) {
       timer.cancel();
@@ -366,7 +369,7 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(26),
-                child: Container(
+                child: SizedBox(
                   height: height,
                   child: LayoutBuilder(
                     builder: (context, constraints) {

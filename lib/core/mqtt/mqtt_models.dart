@@ -27,8 +27,13 @@ class MqttClientConfig {
 }
 
 class MqttIncomingMessage {
-  const MqttIncomingMessage({required this.topic, required this.payload});
+  const MqttIncomingMessage({
+    required this.topic,
+    required this.payload,
+    this.rawPayloadBytes,
+  });
 
   final String topic;
   final String payload;
+  final List<int>? rawPayloadBytes;
 }

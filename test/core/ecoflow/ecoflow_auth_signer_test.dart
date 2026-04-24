@@ -23,7 +23,7 @@ void main() {
 
       expect(
         signed.signBaseString,
-        'accessKey=ak_test&nonce=123456&params={"a":{"b":2,"d":4},"z":1}&timestamp=1710000000000',
+        'a.b=2&a.d=4&z=1&accessKey=ak_test&nonce=123456&timestamp=1710000000000',
       );
       expect(signed.signature.length, 64);
       expect(RegExp(r'^[0-9a-f]{64}$').hasMatch(signed.signature), isTrue);

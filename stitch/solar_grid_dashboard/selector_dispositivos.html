@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Device Selection - Hearth Energy</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Manrope:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                            "surface-variant": "#e7e2d3",
+                            "on-secondary-fixed": "#004a10",
+                            "on-primary-container": "#622e00",
+                            "on-primary-fixed": "#431d00",
+                            "primary-container": "#ffaf78",
+                            "on-tertiary-fixed": "#402d00",
+                            "on-secondary-container": "#006017",
+                            "primary": "#974a00",
+                            "inverse-surface": "#0f0e09",
+                            "on-primary": "#fff7f4",
+                            "on-surface": "#353328",
+                            "on-tertiary-fixed-variant": "#634900",
+                            "surface-container-lowest": "#ffffff",
+                            "error": "#aa371c",
+                            "on-error-container": "#671200",
+                            "surface-container-low": "#f8f3e8",
+                            "on-tertiary": "#fff8f1",
+                            "tertiary": "#7a5a00",
+                            "on-surface-variant": "#625f53",
+                            "error-dim": "#821a01",
+                            "surface-dim": "#dfdac9",
+                            "on-primary-fixed-variant": "#703500",
+                            "on-error": "#fff7f6",
+                            "surface-container-highest": "#e7e2d3",
+                            "secondary-dim": "#006118",
+                            "error-container": "#fa7150",
+                            "on-tertiary-container": "#584000",
+                            "inverse-on-surface": "#a09d94",
+                            "primary-fixed-dim": "#ff9b50",
+                            "primary-dim": "#854000",
+                            "secondary-container": "#94f990",
+                            "secondary": "#006f1d",
+                            "tertiary-fixed": "#fec330",
+                            "on-secondary": "#eaffe2",
+                            "tertiary-fixed-dim": "#efb520",
+                            "tertiary-container": "#fec330",
+                            "primary-fixed": "#ffaf78",
+                            "secondary-fixed": "#94f990",
+                            "background": "#fef9ef",
+                            "secondary-fixed-dim": "#86eb83",
+                            "inverse-primary": "#f97f06",
+                            "surface": "#fef9ef",
+                            "on-background": "#353328",
+                            "outline": "#7e7b6e",
+                            "surface-container-high": "#ede8da",
+                            "on-secondary-fixed-variant": "#006b1b",
+                            "tertiary-dim": "#6b4e00",
+                            "outline-variant": "#b6b2a3",
+                            "surface-tint": "#974a00",
+                            "surface-container": "#f3eee1",
+                            "surface-bright": "#fef9ef"
+                    },
+                    "borderRadius": {
+                            "DEFAULT": "1rem",
+                            "lg": "2rem",
+                            "xl": "3rem",
+                            "full": "9999px"
+                    },
+                    "fontFamily": {
+                            "headline": ["Space Grotesk", "sans-serif"],
+                            "display": ["Space Grotesk", "sans-serif"],
+                            "body": ["Manrope", "sans-serif"],
+                            "label": ["Space Grotesk", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        body { font-family: 'Manrope', sans-serif; }
+        h1, h2, h3, h4, h5, h6, .font-display, .font-headline, .font-label { font-family: 'Space Grotesk', sans-serif; }
+        
+        .bg-glass {
+            background: rgba(254, 249, 239, 0.7);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+        }
+        
+        .shadow-ambient {
+            box-shadow: 0 20px 40px rgba(53, 51, 40, 0.04), 0 8px 16px rgba(53, 51, 40, 0.02);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-surface text-on-surface min-h-screen pb-32">
+<!-- TopAppBar -->
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-6 py-4 bg-[#fef9ef]/70 dark:bg-[#1a1914]/70 backdrop-blur-md shadow-none font-['Space_Grotesk'] font-bold tracking-tight text-[#974a00] dark:text-[#ffaf78]">
+<button aria-label="Menu" class="flex items-center justify-center p-2 rounded-full hover:opacity-80 transition-opacity scale-95 transition-transform duration-200">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 0;">bolt</span>
+</button>
+<h1 class="text-xl font-bold font-['Space_Grotesk'] text-[#353328] dark:text-[#ede8da]">HEARTH ENERGY</h1>
+<div class="w-10 h-10 rounded-full overflow-hidden bg-surface-container hover:opacity-80 transition-opacity scale-95 transition-transform duration-200 cursor-pointer">
+<img alt="User Avatar" class="w-full h-full object-cover" data-alt="close up portrait of a young professional with soft warm lighting and neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDCCbqoA-9-OgmZU8UWJL68omXd1NtgLgRur3eeYIzByf9LlamBjjkdcd9YYPZNBr1W8R-qbxfOgeLx9pWsQCyFigxm544bVE1nrJf-4NY_f5XhYD-J789T_jVZ73WP3j_NvCAbrRoa756Ypcp8CYxl_Kh8ClodvTOOT6Bb_r8NbbquAwwrzcb9ztgRwOkZGZXd2epLOeqX5EbQt4xqqI5yVBBVgZ__-Zys5DmYwojpa1CkhkGD205noB445v9_3q93fgwVUrMq7TA"/>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="pt-28 px-6 max-w-4xl mx-auto flex flex-col gap-8">
+<!-- Header Section -->
+<section class="flex flex-col gap-2 pt-4">
+<h2 class="text-5xl font-display font-bold text-on-surface tracking-tight">Your Ecosystem</h2>
+<p class="text-lg font-body text-on-surface-variant max-w-lg leading-relaxed">Select a device to monitor and control.</p>
+</section>
+<!-- Device Grid/List -->
+<section class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+<!-- Device Card: DELTA Pro 3 (Online) -->
+<div class="bg-surface-container-high rounded-xl p-6 flex flex-col gap-6 relative overflow-hidden group cursor-pointer transition-all duration-300 hover:shadow-ambient transform hover:-translate-y-1">
+<!-- Status & Battery Row -->
+<div class="flex justify-between items-start z-10">
+<div class="flex items-center gap-2 bg-secondary/10 px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-secondary"></span>
+<span class="font-label text-xs font-semibold uppercase tracking-wider text-secondary">Online</span>
+</div>
+<div class="flex items-center gap-1.5 text-on-surface-variant bg-surface-container-lowest px-3 py-1.5 rounded-full shadow-sm">
+<span class="material-symbols-outlined text-sm" style="font-variation-settings: 'FILL' 1;">battery_6_bar</span>
+<span class="font-label text-sm font-bold text-on-surface">85%</span>
+</div>
+</div>
+<!-- Product Image -->
+<div class="h-48 w-full flex items-center justify-center relative z-10 my-2">
+<img alt="DELTA Pro 3" class="h-full object-contain drop-shadow-2xl mix-blend-multiply" data-alt="sleek modern portable power station with metallic finish on a clean studio background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB3-ULhTgFiLNS62ihjoYk_knpXY-vdFQnDpj91BOHaDKfn02agLNgQ5MgfZJQlfN2n65soO4G9omNVlFx3jQGm1n1xh6NsdViWEExTARfu_8_6T00sBK0bI_Flf6Mmw1oxbfomQ0VedbwAPQn9bnpzEvyypQAuCr8VR8NLug-GxuEvan4KBcqej2R4S_GCFzg__eOzMu-frAgeizHIRoAGGZLktfC7GB-mti6ViVIHHE65Q2cFeR-tVgqZ5DGR7wn__Umn_6dIOUs"/>
+</div>
+<!-- Product Info -->
+<div class="z-10 mt-auto">
+<h3 class="font-display text-2xl font-bold text-on-surface">DELTA Pro 3</h3>
+<p class="font-body text-sm text-on-surface-variant mt-1">Whole Home Backup</p>
+</div>
+<!-- Subtle Gradient Overlay -->
+<div class="absolute inset-0 bg-gradient-to-br from-surface-container-high to-surface-container opacity-50 z-0"></div>
+</div>
+<!-- Device Card: River 2 Max (Offline) -->
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col gap-6 relative overflow-hidden group cursor-pointer transition-all duration-300 hover:shadow-ambient">
+<!-- Status Row -->
+<div class="flex justify-between items-start z-10">
+<div class="flex items-center gap-2 bg-surface-variant px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-outline"></span>
+<span class="font-label text-xs font-semibold uppercase tracking-wider text-on-surface-variant">Offline</span>
+</div>
+</div>
+<!-- Product Image -->
+<div class="h-48 w-full flex items-center justify-center relative z-10 my-2 opacity-60 grayscale transition-all duration-300 group-hover:grayscale-0 group-hover:opacity-100">
+<img alt="River 2 Max" class="h-full object-contain drop-shadow-xl mix-blend-multiply" data-alt="compact portable power bank device with a rugged design on a neutral background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBcp7QNTHEDdn5Rh3vw_ymfTy6qBrdgG4Uck4pCjFKoMIlTBDgRqF484tGKG-_5e5nIz7Zunn5QmTyuQdzwr5M2JTm036dmkGv9IjgeaM4oN6J4w1hISeDRzNXd9jlEJrHMrGLh6FiyJc5SsEakfw6QfhXV8thPmykcG4rVn9Ht1DrP5lBbRO5cdFZN3Zch3R7LUkY09S2oIoMy_saer-bUGhmMruIqDCgb-V1iNRH0JEQSoLZdhrbJl2-TD56cOoOqmEUU0rhi648"/>
+</div>
+<!-- Product Info -->
+<div class="z-10 mt-auto opacity-70 group-hover:opacity-100 transition-opacity duration-300">
+<h3 class="font-display text-2xl font-bold text-on-surface">River 2 Max</h3>
+<p class="font-body text-sm text-on-surface-variant mt-1">Portable Power</p>
+</div>
+</div>
+<!-- Device Card: Smart Generator (Standby) -->
+<div class="bg-surface-container-low rounded-xl p-6 flex flex-col gap-6 relative overflow-hidden group cursor-pointer transition-all duration-300 hover:shadow-ambient transform md:col-span-2 lg:col-span-1">
+<!-- Status Row -->
+<div class="flex justify-between items-start z-10">
+<div class="flex items-center gap-2 bg-tertiary-container/30 px-3 py-1.5 rounded-full">
+<span class="w-2 h-2 rounded-full bg-tertiary"></span>
+<span class="font-label text-xs font-semibold uppercase tracking-wider text-tertiary">Standby</span>
+</div>
+</div>
+<!-- Product Image -->
+<div class="h-48 w-full flex items-center justify-center relative z-10 my-2">
+<img alt="Smart Generator" class="h-full object-contain drop-shadow-xl mix-blend-multiply" data-alt="modern smart inverter generator with a dark grey and black casing on a clean background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAuUtSpglY5hNURcE3JM6-ISkDF2QKBSEpr8XWP06EhEeTrO6rliCEwzv7ebAxD76FJdW-oQ0_odbHyGi2MdRa6vk2mEXdZ28O9BORF2HeQSa7YRLk8EeqMS5w2JGDvrN4d4ARRrezSX-xtew8SrB2sGpz3v-bRCx7IdfZzgufMMq-cj-TAal0xZX7waoPQU78ldhG2WpGsn3ASnNfAiO4XaG53698Jaaqi4Op6gKygoBPB4GKG5GxXjY6onHWkBXE4ietHew1hhAg"/>
+</div>
+<!-- Product Info -->
+<div class="z-10 mt-auto">
+<h3 class="font-display text-2xl font-bold text-on-surface">Smart Generator</h3>
+<p class="font-body text-sm text-on-surface-variant mt-1">Dual Fuel Backup</p>
+</div>
+</div>
+<!-- Add New Device Ghost Card -->
+<div class="border-2 border-dashed border-outline-variant/30 rounded-xl p-6 flex flex-col items-center justify-center gap-4 cursor-pointer hover:bg-surface-container-low transition-colors duration-300 min-h-[300px] md:col-span-2 lg:col-span-1">
+<div class="w-16 h-16 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-2">
+<span class="material-symbols-outlined text-3xl" style="font-variation-settings: 'FILL' 0;">add</span>
+</div>
+<h3 class="font-display text-xl font-bold text-on-surface text-center">Add Device</h3>
+<p class="font-body text-sm text-on-surface-variant text-center max-w-[200px]">Connect a new product to your ecosystem</p>
+</div>
+</section>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full z-50 flex justify-around items-center pb-8 bg-[#fef9ef]/70 dark:bg-[#1a1914]/70 backdrop-blur-2xl shadow-[0_20px_40px_rgba(53,51,40,0.06)] rounded-full mx-6 mb-8 font-['Space_Grotesk'] text-[10px] uppercase tracking-widest font-medium text-[#974a00] dark:text-[#ffaf78] md:hidden" style="width: calc(100% - 3rem);">
+<!-- Home (Inactive) -->
+<a class="flex flex-col items-center justify-center text-[#625f53] dark:text-[#b6b2a3] px-5 py-2 hover:bg-[#f3eee1] dark:hover:bg-[#2c2a23] rounded-full transition-all duration-300" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">home_filled</span>
+<span>Home</span>
+</a>
+<!-- Devices (Active) -->
+<a class="flex flex-col items-center justify-center bg-[#974a00] dark:bg-[#ffaf78] text-[#fef9ef] dark:text-[#353328] rounded-full px-5 py-2 scale-110 hover:bg-[#f3eee1] dark:hover:bg-[#2c2a23] transition-all duration-300 ease-out" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 1;">ev_station</span>
+<span>Devices</span>
+</a>
+<!-- Stats (Inactive) -->
+<a class="flex flex-col items-center justify-center text-[#625f53] dark:text-[#b6b2a3] px-5 py-2 hover:bg-[#f3eee1] dark:hover:bg-[#2c2a23] rounded-full transition-all duration-300" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">query_stats</span>
+<span>Stats</span>
+</a>
+<!-- Settings (Inactive) -->
+<a class="flex flex-col items-center justify-center text-[#625f53] dark:text-[#b6b2a3] px-5 py-2 hover:bg-[#f3eee1] dark:hover:bg-[#2c2a23] rounded-full transition-all duration-300" href="#">
+<span class="material-symbols-outlined mb-1" style="font-variation-settings: 'FILL' 0;">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</body></html>

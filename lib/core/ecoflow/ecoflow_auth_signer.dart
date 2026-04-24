@@ -20,19 +20,18 @@ class EcoFlowSignedHeadersFactory {
     final safeAccessKey = accessKey.trim();
     final safeSecretKey = secretKey.trim();
     final safeNonce = nonce ?? _createNonce();
-    final safeTimestamp = (timestampMillis ?? DateTime.now().millisecondsSinceEpoch).toString();
+    final safeTimestamp =
+        (timestampMillis ??
+                (DateTime.now().microsecondsSinceEpoch * 1000))
+            .toString();
 
-    final signingMap = <String, String>{
-      'accessKey': safeAccessKey,
-      'nonce': safeNonce,
-      'timestamp': safeTimestamp,
-    };
-
-    if (params != null && params.isNotEmpty) {
-      signingMap['params'] = jsonEncode(_canonicalize(params));
-    }
-
-    final baseString = _buildSignBaseString(signingMap);
+    final queryString = _generateQueryParams(params);
+    final baseString = _buildSignBaseString(
+      queryString: queryString,
+      accessKey: safeAccessKey,
+      nonce: safeNonce,
+      timestamp: safeTimestamp,
+    );
     final signature = Hmac(sha256, utf8.encode(safeSecretKey))
         .convert(utf8.encode(baseString))
         .toString();
@@ -56,25 +55,68 @@ class EcoFlowSignedHeadersFactory {
     return (_random.nextInt(900000) + 100000).toString();
   }
 
-  String _buildSignBaseString(Map<String, String> input) {
-    final sortedKeys = input.keys.toList()..sort();
-    return sortedKeys.map((key) => '$key=${input[key]}').join('&');
+  String _buildSignBaseString({
+    required String queryString,
+    required String accessKey,
+    required String nonce,
+    required String timestamp,
+  }) {
+    final suffix = 'accessKey=$accessKey&nonce=$nonce&timestamp=$timestamp';
+    if (queryString.isEmpty) {
+      return suffix;
+    }
+    return '$queryString&$suffix';
   }
 
-  dynamic _canonicalize(dynamic value) {
+  String _generateQueryParams(Map<String, dynamic>? params) {
+    if (params == null || params.isEmpty) {
+      return '';
+    }
+
+    final result = <String>[];
+    params.forEach((key, value) {
+      result.addAll(_processValue(key, value));
+    });
+    result.sort();
+    return result.join('&');
+  }
+
+  List<String> _processValue(String prefix, Object? value) {
+    final result = <String>[];
     if (value is Map) {
-      final sortedEntries = value.entries.toList()
-        ..sort((a, b) => a.key.toString().compareTo(b.key.toString()));
-      return <String, dynamic>{
-        for (final entry in sortedEntries)
-          entry.key.toString(): _canonicalize(entry.value),
-      };
+      value.forEach((k, nested) {
+        final nestedPrefix = '$prefix.${k.toString()}';
+        result.addAll(_processValue(nestedPrefix, nested));
+      });
+      return result;
     }
 
     if (value is List) {
-      return value.map(_canonicalize).toList();
+      for (var i = 0; i < value.length; i++) {
+        final nestedPrefix = '$prefix[$i]';
+        result.addAll(_processValue(nestedPrefix, value[i]));
+      }
+      return result;
     }
 
-    return value;
+    if (value == null) {
+      return result;
+    }
+
+    result.add('$prefix=${_stringifyValue(value)}');
+    return result;
+  }
+
+  String _stringifyValue(Object value) {
+    if (value is bool) {
+      return value ? 'true' : 'false';
+    }
+    if (value is double) {
+      if (value.isFinite && value == value.roundToDouble()) {
+        return value.toInt().toString();
+      }
+      return value.toString();
+    }
+    return value.toString();
   }
 }
