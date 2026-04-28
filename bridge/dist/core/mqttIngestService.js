@@ -1,6 +1,33 @@
 import mqtt from 'mqtt';
 import { randomUUID } from 'node:crypto';
 import { parseEcoflowPayload } from '../parser/ecoflowPayloadParser.js';
+function flattenParams(input) {
+    const out = {};
+    const push = (key, value) => {
+        const normalizedKey = key.trim();
+        if (!normalizedKey) {
+            return;
+        }
+        if (value === null || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+            out[normalizedKey] = value;
+            return;
+        }
+        if (Array.isArray(value)) {
+            out[normalizedKey] = JSON.stringify(value);
+            return;
+        }
+        if (typeof value === 'object') {
+            const nested = value;
+            for (const [childKey, childValue] of Object.entries(nested)) {
+                push(`${normalizedKey}.${childKey}`, childValue);
+            }
+        }
+    };
+    for (const [key, value] of Object.entries(input)) {
+        push(key, value);
+    }
+    return out;
+}
 function toBool(value) {
     if (typeof value === 'boolean') {
         return value;
@@ -88,7 +115,8 @@ export class MqttIngestService {
                 return;
             }
             const changed = {};
-            for (const [rawKey, rawValue] of Object.entries(params)) {
+            const flatParams = flattenParams(params);
+            for (const [rawKey, rawValue] of Object.entries(flatParams)) {
                 const key = rawKey.trim();
                 if (!key) {
                     continue;

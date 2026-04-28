@@ -10,6 +10,44 @@ export interface IngestEvents {
   onDeviceDelta(deviceId: string, delta: unknown): void;
 }
 
+type FlatPrimitive = number | boolean | string | null;
+
+function flattenParams(
+  input: Record<string, unknown>,
+): Record<string, FlatPrimitive> {
+  const out: Record<string, FlatPrimitive> = {};
+
+  const push = (key: string, value: unknown): void => {
+    const normalizedKey = key.trim();
+    if (!normalizedKey) {
+      return;
+    }
+
+    if (value === null || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string') {
+      out[normalizedKey] = value;
+      return;
+    }
+
+    if (Array.isArray(value)) {
+      out[normalizedKey] = JSON.stringify(value);
+      return;
+    }
+
+    if (typeof value === 'object') {
+      const nested = value as Record<string, unknown>;
+      for (const [childKey, childValue] of Object.entries(nested)) {
+        push(`${normalizedKey}.${childKey}`, childValue);
+      }
+    }
+  };
+
+  for (const [key, value] of Object.entries(input)) {
+    push(key, value);
+  }
+
+  return out;
+}
+
 function toBool(value: unknown): boolean | null {
   if (typeof value === 'boolean') {
     return value;
@@ -107,8 +145,9 @@ export class MqttIngestService {
       }
 
       const changed: Record<string, unknown> = {};
+      const flatParams = flattenParams(params);
 
-      for (const [rawKey, rawValue] of Object.entries(params)) {
+      for (const [rawKey, rawValue] of Object.entries(flatParams)) {
         const key = rawKey.trim();
         if (!key) {
           continue;
@@ -134,7 +173,7 @@ export class MqttIngestService {
           state = 'temp';
         }
 
-        const delta = this.store.upsertMetric(sn, channel, state, rawValue as never);
+        const delta = this.store.upsertMetric(sn, channel, state, rawValue);
         Object.assign(changed, delta.changed);
       }
 

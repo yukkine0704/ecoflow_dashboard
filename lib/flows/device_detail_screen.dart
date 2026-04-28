@@ -60,6 +60,28 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
   }
 
+  List<MapEntry<String, dynamic>> _sortedMetricEntries() {
+    final entries = _snapshot.metrics.entries
+        .where((entry) => entry.key.trim().isNotEmpty)
+        .toList();
+    entries.sort((a, b) => a.key.compareTo(b.key));
+    return entries;
+  }
+
+  String _formatMetricValue(dynamic value) {
+    if (value == null) {
+      return 'null';
+    }
+    if (value is num) {
+      final asDouble = value.toDouble();
+      if (asDouble == asDouble.roundToDouble()) {
+        return asDouble.toStringAsFixed(0);
+      }
+      return asDouble.toStringAsFixed(2);
+    }
+    return value.toString();
+  }
+
   double? _metricAsDouble(String key) {
     final raw = _snapshot.metrics[key];
     if (raw is num) {
@@ -211,6 +233,37 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                           : AppStatusTone.active,
                     ),
                   ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppCard(
+            surfaceLevel: 1,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Campos Extendidos',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Todos los campos recibidos del bridge para este dispositivo.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: _sortedMetricEntries()
+                      .map(
+                        (entry) => AppChip(
+                          label:
+                              '${entry.key}: ${_formatMetricValue(entry.value)}',
+                        ),
+                      )
+                      .toList(),
                 ),
               ],
             ),
