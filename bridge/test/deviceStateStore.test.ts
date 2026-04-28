@@ -43,3 +43,34 @@ test('input/output by type aggregate without double counting when component metr
   assert.equal(snapshot.metrics['outputByType.dcW'], 150);
 });
 
+test('delta3 fallback uses total input as solar when only powGetPv is present', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'P351ZAHAPH2R2706';
+
+  store.upsertMetric(deviceId, 'pd', 'inputWatts', 54);
+  store.upsertMetric(deviceId, 'pd', 'powGetPv', 20.7);
+  store.upsertMetric(deviceId, 'pd', 'powGetAcIn', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp2', 0);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.metrics['inputByType.solarW'], 54);
+  assert.equal(snapshot.metrics['pd.powGetPvL'], 33.3);
+});
+
+test('delta3 fallback corrects pvL=0 when total input indicates second panel', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'P351ZAHAPH2R2706';
+
+  store.upsertMetric(deviceId, 'pd', 'inputWatts', 62);
+  store.upsertMetric(deviceId, 'pd', 'powGetPv', 23.5);
+  store.upsertMetric(deviceId, 'pd', 'powGetPvL', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetAcIn', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp2', 0);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.metrics['inputByType.solarW'], 62);
+});

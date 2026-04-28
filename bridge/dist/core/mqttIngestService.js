@@ -156,6 +156,11 @@ export class MqttIngestService {
                 const statusDelta = this.store.upsertStatus(sn, online ? 'online' : 'offline');
                 Object.assign(changed, statusDelta.changed);
             }
+            else {
+                // If we decoded telemetry for this SN, consider device online.
+                const statusDelta = this.store.upsertStatus(sn, 'online');
+                Object.assign(changed, statusDelta.changed);
+            }
             this.events.onDeviceDelta(sn, {
                 deviceId: sn,
                 changed,

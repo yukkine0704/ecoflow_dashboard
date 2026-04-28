@@ -49,6 +49,8 @@ function normalizeState(raw: string): string {
     outPower: 'outPower',
     powGetAcIn: 'powGetAcIn',
     powGetPv: 'powGetPv',
+    powGetPvH: 'powGetPvH',
+    powGetPvL: 'powGetPvL',
     powGetDcp: 'powGetDcp',
     powGetDcp2: 'powGetDcp2',
     powGetAcOut: 'powGetAcOut',

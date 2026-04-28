@@ -60,6 +60,23 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
   }
 
+  void _printRawMetricsToConsole() {
+    final pretty = _prettyMetrics(_snapshot.metrics);
+    final header =
+        '[RAW_METRICS][${_snapshot.deviceId}] updatedAt=${_snapshot.updatedAt.toIso8601String()}';
+    debugPrint(header);
+    const chunkSize = 900;
+    for (var i = 0; i < pretty.length; i += chunkSize) {
+      final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
+      debugPrint(pretty.substring(i, end));
+    }
+    debugPrint('[RAW_METRICS_END][${_snapshot.deviceId}]');
+    appGooeyToast.success(
+      'Métricas enviadas a consola',
+      config: const AppToastConfig(meta: 'RAW METRICS'),
+    );
+  }
+
   List<MapEntry<String, dynamic>> _sortedMetricEntries() {
     final entries = _snapshot.metrics.entries
         .where((entry) => entry.key.trim().isNotEmpty)
@@ -271,9 +288,21 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Métricas raw',
-                  style: Theme.of(context).textTheme.titleMedium,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Métricas raw',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    AppButton(
+                      label: 'Copiar a consola',
+                      size: AppButtonSize.small,
+                      variant: AppButtonVariant.secondary,
+                      onPressed: _printRawMetricsToConsole,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.md),
                 SingleChildScrollView(

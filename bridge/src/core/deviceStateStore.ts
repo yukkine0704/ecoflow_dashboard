@@ -96,7 +96,44 @@ export class DeviceStateStore {
   private resolveActiveInputComponents(components: Record<string, number>): Record<string, number> {
     const sourceSpecific = Object.entries(components).filter(([metricKey]) => this.isSourceSpecificInputMetric(metricKey));
     if (sourceSpecific.length > 0) {
-      return Object.fromEntries(sourceSpecific);
+      const specificMap = Object.fromEntries(sourceSpecific);
+      const keys = Object.keys(specificMap).map((k) => k.toLowerCase());
+      const hasPvSplit = keys.some((k) => k.includes('powgetpvh') || k.includes('powgetpvl'));
+      const hasOnlyPvGeneric = keys.some((k) => k.includes('powgetpv')) && !hasPvSplit;
+      const hasOtherInputSources = Object.entries(specificMap).some(([metricKey, value]) => {
+        const k = metricKey.toLowerCase();
+        const isOtherSource = (
+          k.includes('powgetacin')
+          || k.includes('powgetdcp')
+          || k.includes('carinpower')
+          || k.includes('dcinpower')
+        );
+        return isOtherSource && value > 0;
+      });
+
+      // Delta 3/Gen3 solar fallback:
+      // If only solar is active and total input is higher than reported solar
+      // channels, complete missing solar power by inference.
+      const genericInput = Object.entries(components).find(([metricKey]) => metricKey.toLowerCase().endsWith('.inputwatts'));
+      if (genericInput && Number.isFinite(genericInput[1]) && !hasOtherInputSources) {
+        const totalInput = genericInput[1];
+        const solarKeys = Object.keys(specificMap).filter((k) => k.toLowerCase().includes('powgetpv'));
+        const solarSum = solarKeys.reduce((acc, key) => acc + (specificMap[key] ?? 0), 0);
+
+        if (solarKeys.length > 0 && totalInput > solarSum + 0.5) {
+          const delta = Math.max(totalInput - solarSum, 0);
+          const pvLKey = solarKeys.find((k) => k.toLowerCase().includes('powgetpvl'));
+          if (pvLKey) {
+            specificMap[pvLKey] = (specificMap[pvLKey] ?? 0) + delta;
+          } else if (hasOnlyPvGeneric) {
+            specificMap['pd.powGetPvL'] = delta;
+          } else {
+            specificMap['pd.powGetPvInferred'] = delta;
+          }
+        }
+      }
+
+      return specificMap;
     }
     return components;
   }
@@ -297,6 +334,10 @@ export class DeviceStateStore {
             delete record.inputComponents[metricKey];
           }
           const activeInput = this.resolveActiveInputComponents(record.inputComponents);
+          if (activeInput['pd.powGetPvL'] !== undefined && record.snapshot.metrics['pd.powGetPvL'] === undefined) {
+            record.snapshot.metrics['pd.powGetPvL'] = activeInput['pd.powGetPvL'];
+            changed['metrics.pd.powGetPvL'] = activeInput['pd.powGetPvL'];
+          }
           record.snapshot.totalInputW = sumValues(activeInput);
           changed.totalInputW = record.snapshot.totalInputW;
           this.refreshInputByType(activeInput, record, changed);

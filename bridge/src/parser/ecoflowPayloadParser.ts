@@ -202,6 +202,8 @@ function extractKnownTelemetryFromProto(
     const map: Array<[number, string]> = [
       [3, 'pd.inputWatts'],
       [4, 'pd.outputWatts'],
+      [35, 'pd.powGetPvH'],
+      [36, 'pd.powGetPvL'],
       [37, 'pd.powGet12v'],
       [53, 'pd.powGetAc'],
       [54, 'pd.powGetAcIn'],
