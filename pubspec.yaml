@@ -8,8 +8,6 @@ environment:
 
 dependencies:
   connectivity_plus: ^7.1.1
-  crypto: ^3.0.6
-  dio: ^5.9.2
   fl_chart: ^1.2.0
   flutter:
     sdk: flutter
@@ -24,11 +22,10 @@ dependencies:
   iconsax_flutter: ^1.0.1
   intl: ^0.20.2
   logger: ^2.7.0
-  mqtt5_client: ^4.17.0
-  mqtt_client: ^10.11.10
   package_info_plus: ^9.0.1
   riverpod_annotation: ^4.0.2
   syncfusion_flutter_gauges: ^33.1.49
+  web_socket_channel: ^3.0.3
 
 dev_dependencies:
   flutter_test:
