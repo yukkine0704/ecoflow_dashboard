@@ -5,6 +5,10 @@ import { fetchOpenApiDeviceList } from './ecoflow/openApi.js';
 import { DeviceStateStore } from './core/deviceStateStore.js';
 import { MqttIngestService } from './core/mqttIngestService.js';
 import { WsGateway } from './core/wsGateway.js';
+const TARGET_MIGRATION_SNS = new Set([
+    'P351ZAHAPH2R2706',
+    'R651ZAB5XH111262',
+]);
 function buildCatalogPayload(devices) {
     return {
         devices: devices
@@ -51,6 +55,11 @@ async function main() {
     });
     const catalog = await resolveCatalog(config);
     const deviceIds = catalog.map((device) => device.sn);
+    const missingTargets = [...TARGET_MIGRATION_SNS].filter((sn) => !deviceIds.includes(sn));
+    if (missingTargets.length > 0) {
+        console.warn(`[bridge] migration targets missing from resolved catalog: ${missingTargets.join(', ')}. `
+            + 'Set ECOFLOW_DEVICE_SNS or verify Open API visibility.');
+    }
     const store = new DeviceStateStore();
     store.setCatalog(catalog.map((device) => ({
         deviceId: device.sn,

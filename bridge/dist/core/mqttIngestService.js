@@ -1,6 +1,7 @@
 import mqtt from 'mqtt';
 import { randomUUID } from 'node:crypto';
 import { parseEcoflowPayload } from '../parser/ecoflowPayloadParser.js';
+import { canonicalizeMetric } from '../mapping/normalize.js';
 function flattenParams(input) {
     const out = {};
     const push = (key, value) => {
@@ -144,7 +145,10 @@ export class MqttIngestService {
                     channel = 'pd';
                     state = 'temp';
                 }
-                const delta = this.store.upsertMetric(sn, channel, state, rawValue);
+                const rawDelta = this.store.upsertRawMetric(sn, channel, state, rawValue);
+                Object.assign(changed, rawDelta.changed);
+                const canonical = canonicalizeMetric(channel, state);
+                const delta = this.store.upsertMetric(sn, canonical.channel, canonical.state, rawValue);
                 Object.assign(changed, delta.changed);
             }
             const online = toBool((params.status ?? params.online ?? params.isOnline));

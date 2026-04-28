@@ -6,16 +6,20 @@ function toMap(value) {
 }
 function readVarint(bytes, offset) {
     let result = 0;
-    let shift = 0;
+    let factor = 1;
     let index = offset;
-    while (index < bytes.length && shift <= 63) {
+    while (index < bytes.length) {
         const byte = bytes[index];
-        result |= (byte & 0x7f) << shift;
+        result += (byte & 0x7f) * factor;
         index += 1;
         if ((byte & 0x80) === 0) {
+            if (!Number.isSafeInteger(result))
+                return null;
             return { value: result, nextOffset: index };
         }
-        shift += 7;
+        factor *= 128;
+        if (!Number.isSafeInteger(factor))
+            return null;
     }
     return null;
 }
@@ -81,6 +85,138 @@ function xorWithSeqByte(bytes, seq) {
         out[i] = bytes[i] ^ key;
     return out;
 }
+function readFixed32Float(bytes, offset) {
+    if (offset + 4 > bytes.length)
+        return null;
+    const view = new DataView(bytes.buffer, bytes.byteOffset + offset, 4);
+    return view.getFloat32(0, true);
+}
+function extractTopLevelFields(bytes) {
+    const out = new Map();
+    let offset = 0;
+    while (offset < bytes.length) {
+        const tag = readVarint(bytes, offset);
+        if (!tag)
+            break;
+        offset = tag.nextOffset;
+        const field = tag.value >> 3;
+        const wireType = tag.value & 0x07;
+        if (wireType === 0) {
+            const val = readVarint(bytes, offset);
+            if (!val)
+                break;
+            offset = val.nextOffset;
+            const list = out.get(field) ?? [];
+            list.push(val.value);
+            out.set(field, list);
+            continue;
+        }
+        if (wireType === 5) {
+            const floatValue = readFixed32Float(bytes, offset);
+            if (floatValue === null)
+                break;
+            offset += 4;
+            const list = out.get(field) ?? [];
+            list.push(floatValue);
+            out.set(field, list);
+            continue;
+        }
+        if (wireType === 2) {
+            const len = readVarint(bytes, offset);
+            if (!len)
+                break;
+            offset = len.nextOffset;
+            const end = offset + len.value;
+            if (len.value < 0 || end > bytes.length)
+                break;
+            const chunk = bytes.slice(offset, end);
+            offset = end;
+            // Best effort for string fields.
+            const text = toUtf8(chunk).trim();
+            if (text && /^[\x20-\x7E]+$/.test(text)) {
+                const list = out.get(field) ?? [];
+                list.push(text);
+                out.set(field, list);
+            }
+            continue;
+        }
+        offset = skipWire(bytes, offset, wireType);
+        if (offset < 0)
+            break;
+    }
+    return out;
+}
+function getNumber(fields, field) {
+    const values = fields.get(field);
+    if (!values || values.length === 0)
+        return null;
+    const last = values[values.length - 1];
+    return typeof last === 'number' && Number.isFinite(last) ? last : null;
+}
+function extractKnownTelemetryFromProto(pdata, envelope) {
+    const fields = extractTopLevelFields(pdata);
+    if (fields.size === 0)
+        return null;
+    const out = {};
+    // BMSHeartBeatReport
+    if (envelope.cmdFunc === 32 && envelope.cmdId === 50) {
+        const soc = getNumber(fields, 6);
+        const temp = getNumber(fields, 9);
+        const maxCellTemp = getNumber(fields, 18);
+        const f32ShowSoc = getNumber(fields, 25);
+        const inputWatts = getNumber(fields, 26);
+        const outputWatts = getNumber(fields, 27);
+        if (soc !== null)
+            out['bms.soc'] = soc;
+        if (temp !== null)
+            out['bms.temp'] = temp;
+        if (maxCellTemp !== null)
+            out['bms.maxCellTemp'] = maxCellTemp;
+        if (f32ShowSoc !== null)
+            out['bms.f32ShowSoc'] = f32ShowSoc;
+        if (inputWatts !== null)
+            out['bms.inputWatts'] = inputWatts;
+        if (outputWatts !== null)
+            out['bms.outputWatts'] = outputWatts;
+    }
+    // RuntimePropertyUpload
+    if (envelope.cmdFunc === 254 && envelope.cmdId === 22) {
+        const tempPcsDc = getNumber(fields, 26);
+        const tempPcsAc = getNumber(fields, 27);
+        const tempPv = getNumber(fields, 379);
+        if (tempPcsDc !== null)
+            out['pd.tempPcsDc'] = tempPcsDc;
+        if (tempPcsAc !== null)
+            out['pd.tempPcsAc'] = tempPcsAc;
+        if (tempPv !== null)
+            out['pd.tempPv'] = tempPv;
+    }
+    // DisplayPropertyUpload
+    if (envelope.cmdFunc === 254 && envelope.cmdId === 21) {
+        const map = [
+            [3, 'pd.inputWatts'],
+            [4, 'pd.outputWatts'],
+            [37, 'pd.powGet12v'],
+            [53, 'pd.powGetAc'],
+            [54, 'pd.powGetAcIn'],
+            [77, 'pd.powGetDcp2'],
+            [158, 'pd.powGetBms'],
+            [242, 'pd.bmsBattSoc'],
+            [258, 'pd.bmsMinCellTemp'],
+            [259, 'pd.bmsMaxCellTemp'],
+            [262, 'pd.cmsBattSoc'],
+            [361, 'pd.powGetPv'],
+            [368, 'pd.powGetAcOut'],
+            [425, 'pd.powGetDcp'],
+        ];
+        for (const [field, key] of map) {
+            const value = getNumber(fields, field);
+            if (value !== null)
+                out[key] = value;
+        }
+    }
+    return Object.keys(out).length > 0 ? out : null;
+}
 function extractHeaderMessages(bytes) {
     const headers = [];
     let offset = 0;
@@ -115,6 +251,7 @@ function parseHeaderEnvelope(header) {
     let seq = 0;
     let cmdId = 0;
     let cmdFunc = 0;
+    let src = 0;
     let offset = 0;
     while (offset < header.length) {
         const tag = readVarint(header, offset);
@@ -135,11 +272,13 @@ function parseHeaderEnvelope(header) {
             offset = end;
             continue;
         }
-        if (wireType === 0 && (field === 6 || field === 8 || field === 9 || field === 14)) {
+        if (wireType === 0 && (field === 4 || field === 6 || field === 8 || field === 9 || field === 14)) {
             const val = readVarint(header, offset);
             if (!val)
                 break;
             offset = val.nextOffset;
+            if (field === 4)
+                src = val.value;
             if (field === 6)
                 encType = val.value;
             if (field === 8)
@@ -154,7 +293,7 @@ function parseHeaderEnvelope(header) {
         if (offset < 0)
             break;
     }
-    return { pdata, encType, seq, cmdId, cmdFunc };
+    return { pdata, encType, seq, cmdId, cmdFunc, src };
 }
 function walkNumeric(bytes, out, maxDepth) {
     let offset = 0;
@@ -257,10 +396,25 @@ export function parseEcoflowPayload(rawBuffer) {
             if (!envelope.pdata || envelope.pdata.length === 0)
                 continue;
             const tries = [envelope.pdata];
-            if (envelope.encType === 1 && envelope.seq !== 0) {
+            if (envelope.encType === 1 && envelope.seq !== 0 && envelope.src !== 32) {
                 tries.push(xorWithSeqByte(envelope.pdata, envelope.seq));
             }
             for (const pdata of tries) {
+                const known = extractKnownTelemetryFromProto(pdata, {
+                    cmdFunc: envelope.cmdFunc,
+                    cmdId: envelope.cmdId,
+                });
+                if (known) {
+                    return {
+                        payload: known,
+                        params: known,
+                        debug: {
+                            mode: `protobuf-known(cmdFunc=${envelope.cmdFunc},cmdId=${envelope.cmdId})`,
+                            preview: JSON.stringify(known).slice(0, 120),
+                            hex,
+                        },
+                    };
+                }
                 const decoded = decodeJsonFromBytes(pdata) ?? decodeJsonSubstringFromBytes(pdata);
                 if (decoded) {
                     return {

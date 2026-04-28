@@ -478,6 +478,28 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     }
   }
 
+  double? _metricAsDouble(BridgeDeviceSnapshot device, String key) {
+    final raw = device.metrics[key];
+    if (raw is num) {
+      return raw.toDouble();
+    }
+    if (raw is String) {
+      return double.tryParse(raw);
+    }
+    return null;
+  }
+
+  AppStatusBadge _typedPowerBadge({
+    required String label,
+    required double? watts,
+    AppStatusTone tone = AppStatusTone.active,
+  }) {
+    return AppStatusBadge(
+      label: watts == null ? '$label N/D' : '$label ${watts.toStringAsFixed(0)}W',
+      tone: watts == null ? AppStatusTone.neutral : tone,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final visibleDevices = _filteredDevices(_devices);
@@ -633,6 +655,32 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                             tone: device.totalOutputW == null
                                 ? AppStatusTone.neutral
                                 : AppStatusTone.active,
+                          ),
+                          _typedPowerBadge(
+                            label: 'In Solar',
+                            watts: _metricAsDouble(device, 'inputByType.solarW'),
+                          ),
+                          _typedPowerBadge(
+                            label: 'In AC',
+                            watts: _metricAsDouble(device, 'inputByType.acW'),
+                          ),
+                          _typedPowerBadge(
+                            label: 'Out AC',
+                            watts: _metricAsDouble(device, 'outputByType.acW'),
+                          ),
+                          _typedPowerBadge(
+                            label: 'Out DC',
+                            watts: _metricAsDouble(device, 'outputByType.dcW'),
+                          ),
+                          AppStatusBadge(
+                            label: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                                ? 'Celda Max N/D'
+                                : 'Celda Max ${_metricAsDouble(device, 'battery.maxCellTempC')!.toStringAsFixed(1)}°C',
+                            tone: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                                ? AppStatusTone.neutral
+                                : (_metricAsDouble(device, 'battery.maxCellTempC')! >= 45
+                                      ? AppStatusTone.warning
+                                      : AppStatusTone.active),
                           ),
                         ],
                       ),

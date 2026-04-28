@@ -5,6 +5,7 @@ import type { BridgeConfig } from '../config/index.js';
 import type { EcoflowMqttCertification } from '../ecoflow/appAuth.js';
 import type { DeviceStateStore } from './deviceStateStore.js';
 import { parseEcoflowPayload } from '../parser/ecoflowPayloadParser.js';
+import { canonicalizeMetric } from '../mapping/normalize.js';
 
 export interface IngestEvents {
   onDeviceDelta(deviceId: string, delta: unknown): void;
@@ -173,7 +174,11 @@ export class MqttIngestService {
           state = 'temp';
         }
 
-        const delta = this.store.upsertMetric(sn, channel, state, rawValue);
+        const rawDelta = this.store.upsertRawMetric(sn, channel, state, rawValue);
+        Object.assign(changed, rawDelta.changed);
+
+        const canonical = canonicalizeMetric(channel, state);
+        const delta = this.store.upsertMetric(sn, canonical.channel, canonical.state, rawValue);
         Object.assign(changed, delta.changed);
       }
 

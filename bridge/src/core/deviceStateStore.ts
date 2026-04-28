@@ -7,6 +7,8 @@ interface DeviceRecord {
   snapshot: DeviceSnapshot;
   inputComponents: Record<string, number>;
   outputComponents: Record<string, number>;
+  batterySourceScore: number;
+  temperatureSourceScore: number;
 }
 
 function toNumber(value: PrimitiveMetric): number | null {
@@ -41,8 +43,29 @@ export class DeviceStateStore {
     return Math.abs(previous - next) > 12;
   }
 
-  private detectInputType(metricKey: string): 'solar' | 'ac' | 'car' | 'dc' | 'other' {
+  private batterySourceScore(metricKey: string): number {
     const key = metricKey.toLowerCase();
+    if (key.endsWith('.soc')) return 100;
+    if (key.includes('f32showsoc') || key.includes('f32lcdshowsoc')) return 90;
+    if (key.includes('bmsbattsoc')) return 80;
+    if (key.includes('cmsbattsoc') || key.includes('lcdshowsoc')) return 70;
+    return 50;
+  }
+
+  private temperatureSourceScore(metricKey: string): number {
+    const key = metricKey.toLowerCase();
+    if (key.endsWith('.temp') && key.includes('bms')) return 100;
+    if (key.endsWith('.temp') && key.includes('pd')) return 95;
+    if (key.endsWith('.temp')) return 90;
+    if (key.includes('maxcelltemp')) return 85;
+    if (key.includes('mincelltemp')) return 80;
+    if (key.includes('mos')) return 70;
+    if (key.includes('env')) return 60;
+    return 50;
+  }
+
+  private detectInputType(metricKey: string): 'solar' | 'ac' | 'car' | 'dc' | 'other' {
+    const key = metricKey.toLowerCase().replace(/[._-]/g, '');
     if (key.includes('powgetpv') || key.includes('pv') || key.includes('solar')) return 'solar';
     if (key.includes('powgetacin') || key.includes('acin') || key.includes('acinput') || key.includes('ac.in')) return 'ac';
     if (key.includes('powgetdcp2') || key.includes('carin') || key.includes('car')) return 'car';
@@ -57,7 +80,7 @@ export class DeviceStateStore {
   }
 
   private isSourceSpecificInputMetric(metricKey: string): boolean {
-    const key = metricKey.toLowerCase();
+    const key = metricKey.toLowerCase().replace(/[._-]/g, '');
     return (
       key.includes('powgetacin')
       || key.includes('powgetpv')
@@ -72,6 +95,34 @@ export class DeviceStateStore {
 
   private resolveActiveInputComponents(components: Record<string, number>): Record<string, number> {
     const sourceSpecific = Object.entries(components).filter(([metricKey]) => this.isSourceSpecificInputMetric(metricKey));
+    if (sourceSpecific.length > 0) {
+      return Object.fromEntries(sourceSpecific);
+    }
+    return components;
+  }
+
+  private detectOutputType(metricKey: string): 'ac' | 'dc' | 'other' {
+    const key = metricKey.toLowerCase().replace(/[._-]/g, '');
+    if (key.includes('powgetacout') || key.includes('powgetac') || key.includes('acoutput') || key.includes('acout')) return 'ac';
+    if (key.includes('12v') || key.includes('24v') || key.includes('typec') || key.includes('qcusb') || key.includes('dcp') || key.includes('dc')) return 'dc';
+    return 'other';
+  }
+
+  private isSourceSpecificOutputMetric(metricKey: string): boolean {
+    const key = metricKey.toLowerCase().replace(/[._-]/g, '');
+    return (
+      key.includes('powgetacout')
+      || key.includes('powgetac')
+      || key.includes('powget12v')
+      || key.includes('powget24v')
+      || key.includes('powgettypec')
+      || key.includes('powgetqcusb')
+      || key.includes('powgetdcp')
+    );
+  }
+
+  private resolveActiveOutputComponents(components: Record<string, number>): Record<string, number> {
+    const sourceSpecific = Object.entries(components).filter(([metricKey]) => this.isSourceSpecificOutputMetric(metricKey));
     if (sourceSpecific.length > 0) {
       return Object.fromEntries(sourceSpecific);
     }
@@ -108,6 +159,49 @@ export class DeviceStateStore {
         changed[`metrics.${metricKey}`] = total;
       }
     }
+  }
+
+  private refreshOutputByType(
+    components: Record<string, number>,
+    record: DeviceRecord,
+    changed: Record<string, PrimitiveMetric>,
+  ): void {
+    const bucketMap: Record<string, Record<string, number>> = {
+      ac: {},
+      dc: {},
+      other: {},
+    };
+
+    for (const [metricKey, value] of Object.entries(components)) {
+      const bucket = this.detectOutputType(metricKey);
+      bucketMap[bucket][metricKey] = value;
+    }
+
+    for (const type of ['ac', 'dc', 'other']) {
+      const bucket = bucketMap[type] ?? {};
+      const total = sumValues(bucket);
+      const metricKey = `outputByType.${type}W`;
+      if (total === null) {
+        delete record.snapshot.metrics[metricKey];
+        changed[`metrics.${metricKey}`] = null;
+      } else {
+        record.snapshot.metrics[metricKey] = total;
+        changed[`metrics.${metricKey}`] = total;
+      }
+    }
+  }
+
+  upsertRawMetric(deviceId: string, channel: string, state: string, rawPayload: PrimitiveMetric): DeviceDeltaPayload {
+    const now = new Date().toISOString();
+    const record = this.getOrCreate(deviceId, now);
+    const metricKey = `${channel}.${state}`;
+    record.snapshot.metrics[metricKey] = rawPayload;
+    record.snapshot.updatedAt = now;
+    return {
+      deviceId,
+      changed: { [`metrics.${metricKey}`]: rawPayload },
+      updatedAt: now,
+    };
   }
 
   setCatalog(devices: Array<{ deviceId: string; displayName?: string; model?: string; imageUrl?: string }>): void {
@@ -168,8 +262,11 @@ export class DeviceStateStore {
           const battery = toNumber(normalizedValue);
           if (battery !== null) {
             const rounded = Math.round(battery);
-            if (!this.isBatteryJumpSuspicious(record.snapshot.batteryPercent, rounded)) {
+            const sourceScore = this.batterySourceScore(metricKey);
+            const scoreOk = sourceScore >= record.batterySourceScore || record.snapshot.batteryPercent === null;
+            if (scoreOk && !this.isBatteryJumpSuspicious(record.snapshot.batteryPercent, rounded)) {
               record.snapshot.batteryPercent = rounded;
+              record.batterySourceScore = sourceScore;
               changed.batteryPercent = record.snapshot.batteryPercent;
             }
           }
@@ -178,10 +275,17 @@ export class DeviceStateStore {
         case 'temperatureC': {
           const temp = toNumber(normalizedValue);
           if (temp !== null) {
-            if (!this.isTemperatureJumpSuspicious(record.snapshot.temperatureC, temp)) {
+            const sourceScore = this.temperatureSourceScore(metricKey);
+            const scoreOk = sourceScore >= record.temperatureSourceScore || record.snapshot.temperatureC === null;
+            if (scoreOk && !this.isTemperatureJumpSuspicious(record.snapshot.temperatureC, temp)) {
               record.snapshot.temperatureC = temp;
+              record.temperatureSourceScore = sourceScore;
               changed.temperatureC = record.snapshot.temperatureC;
             }
+          }
+          if (state === 'maxCellTemp' || state === 'bmsMaxCellTemp') {
+            record.snapshot.metrics['battery.maxCellTempC'] = temp;
+            changed['metrics.battery.maxCellTempC'] = temp;
           }
           break;
         }
@@ -205,8 +309,10 @@ export class DeviceStateStore {
           } else {
             delete record.outputComponents[metricKey];
           }
-          record.snapshot.totalOutputW = sumValues(record.outputComponents);
+          const activeOutput = this.resolveActiveOutputComponents(record.outputComponents);
+          record.snapshot.totalOutputW = sumValues(activeOutput);
           changed.totalOutputW = record.snapshot.totalOutputW;
+          this.refreshOutputByType(activeOutput, record, changed);
           break;
         }
         case 'metric': {
@@ -272,6 +378,8 @@ export class DeviceStateStore {
       },
       inputComponents: {},
       outputComponents: {},
+      batterySourceScore: 0,
+      temperatureSourceScore: 0,
     };
 
     this.devices.set(deviceId, created);

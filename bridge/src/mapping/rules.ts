@@ -32,6 +32,8 @@ export const MAPPING_RULES: MappingRule[] = [
   { channel: '*', state: 'tempPv2', field: 'temperatureC' },
   { channel: '*', state: 'mpptTemp', field: 'temperatureC' },
   { channel: '*', state: 'outTemp', field: 'temperatureC' },
+  { channel: '*', state: 'maxCellTemp', field: 'temperatureC' },
+  { channel: '*', state: 'bmsMaxCellTemp', field: 'temperatureC' },
 
   { channel: 'pd', state: 'inputWatts', field: 'totalInputW' },
   { channel: '*', state: 'inPower', field: 'totalInputW' },
@@ -47,6 +49,8 @@ export const MAPPING_RULES: MappingRule[] = [
   { channel: 'mppt', state: 'pv2InputWatts', field: 'totalInputW' },
   { channel: '*', state: 'powGetAcIn', field: 'totalInputW' },
   { channel: '*', state: 'powGetPv', field: 'totalInputW' },
+  { channel: '*', state: 'powGetPvH', field: 'totalInputW' },
+  { channel: '*', state: 'powGetPvL', field: 'totalInputW' },
   { channel: '*', state: 'powGetDcp', field: 'totalInputW' },
   { channel: '*', state: 'powGetDcp2', field: 'totalInputW' },
 
@@ -58,6 +62,14 @@ export const MAPPING_RULES: MappingRule[] = [
   { channel: 'inv', state: 'outPower', field: 'totalOutputW' },
   { channel: 'inv', state: 'outputWatts', field: 'totalOutputW' },
   { channel: 'acOut', state: 'acOutputWatts', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetAcOut', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetAc', field: 'totalOutputW' },
+  { channel: '*', state: 'powGet12v', field: 'totalOutputW' },
+  { channel: '*', state: 'powGet24v', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetTypec1', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetTypec2', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetQcusb1', field: 'totalOutputW' },
+  { channel: '*', state: 'powGetQcusb2', field: 'totalOutputW' },
 
   { channel: 'pd', state: 'remainTime', field: 'metric', metricKey: 'pd.remainTime' },
   { channel: 'pd', state: 'batteryType', field: 'metric', metricKey: 'pd.batteryType' },

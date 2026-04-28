@@ -93,6 +93,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return null;
   }
 
+  AppStatusBadge _powerBadge(String label, double? watts) {
+    return AppStatusBadge(
+      label: watts == null ? '$label N/D' : '$label ${watts.toStringAsFixed(0)}W',
+      tone: watts == null ? AppStatusTone.neutral : AppStatusTone.active,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -165,6 +172,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                                 : AppStatusTone.active),
                     ),
                     AppStatusBadge(
+                      label: _metricAsDouble('battery.maxCellTempC') == null
+                          ? 'Celda batería max N/D'
+                          : 'Celda batería max ${_metricAsDouble('battery.maxCellTempC')!.toStringAsFixed(1)}°C',
+                      tone: _metricAsDouble('battery.maxCellTempC') == null
+                          ? AppStatusTone.neutral
+                          : (_metricAsDouble('battery.maxCellTempC')! >= 45
+                                ? AppStatusTone.warning
+                                : AppStatusTone.active),
+                    ),
+                    AppStatusBadge(
                       label: _snapshot.totalInputW == null
                           ? 'Entrada total N/D'
                           : 'Entrada total ${_snapshot.totalInputW!.toStringAsFixed(0)}W',
@@ -192,46 +209,26 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                   spacing: AppSpacing.sm,
                   runSpacing: AppSpacing.sm,
                   children: [
-                    AppStatusBadge(
-                      label: _metricAsDouble('inputByType.solarW') == null
-                          ? 'Solar N/D'
-                          : 'Solar ${_metricAsDouble('inputByType.solarW')!.toStringAsFixed(0)}W',
-                      tone: _metricAsDouble('inputByType.solarW') == null
-                          ? AppStatusTone.neutral
-                          : AppStatusTone.active,
-                    ),
-                    AppStatusBadge(
-                      label: _metricAsDouble('inputByType.acW') == null
-                          ? 'AC N/D'
-                          : 'AC ${_metricAsDouble('inputByType.acW')!.toStringAsFixed(0)}W',
-                      tone: _metricAsDouble('inputByType.acW') == null
-                          ? AppStatusTone.neutral
-                          : AppStatusTone.active,
-                    ),
-                    AppStatusBadge(
-                      label: _metricAsDouble('inputByType.carW') == null
-                          ? 'Car N/D'
-                          : 'Car ${_metricAsDouble('inputByType.carW')!.toStringAsFixed(0)}W',
-                      tone: _metricAsDouble('inputByType.carW') == null
-                          ? AppStatusTone.neutral
-                          : AppStatusTone.active,
-                    ),
-                    AppStatusBadge(
-                      label: _metricAsDouble('inputByType.dcW') == null
-                          ? 'DC N/D'
-                          : 'DC ${_metricAsDouble('inputByType.dcW')!.toStringAsFixed(0)}W',
-                      tone: _metricAsDouble('inputByType.dcW') == null
-                          ? AppStatusTone.neutral
-                          : AppStatusTone.active,
-                    ),
-                    AppStatusBadge(
-                      label: _metricAsDouble('inputByType.otherW') == null
-                          ? 'Other N/D'
-                          : 'Other ${_metricAsDouble('inputByType.otherW')!.toStringAsFixed(0)}W',
-                      tone: _metricAsDouble('inputByType.otherW') == null
-                          ? AppStatusTone.neutral
-                          : AppStatusTone.active,
-                    ),
+                    _powerBadge('Solar', _metricAsDouble('inputByType.solarW')),
+                    _powerBadge('AC', _metricAsDouble('inputByType.acW')),
+                    _powerBadge('Car', _metricAsDouble('inputByType.carW')),
+                    _powerBadge('DC', _metricAsDouble('inputByType.dcW')),
+                    _powerBadge('Other', _metricAsDouble('inputByType.otherW')),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  'Salida Por Tipo',
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Wrap(
+                  spacing: AppSpacing.sm,
+                  runSpacing: AppSpacing.sm,
+                  children: [
+                    _powerBadge('AC', _metricAsDouble('outputByType.acW')),
+                    _powerBadge('DC', _metricAsDouble('outputByType.dcW')),
+                    _powerBadge('Other', _metricAsDouble('outputByType.otherW')),
                   ],
                 ),
               ],
