@@ -211,7 +211,7 @@ function walkNumeric(bytes: Uint8Array, out: Numeric[], maxDepth: number): void 
 
 function extractNumericTelemetry(
   bytes: Uint8Array,
-  options: { allowAdvanced: boolean },
+  options: { allowAdvanced: boolean; allowPowerHeuristics: boolean },
 ): Record<string, unknown> | null {
   const items: Numeric[] = [];
   walkNumeric(bytes, items, 5);
@@ -232,11 +232,14 @@ function extractNumericTelemetry(
     }
   }
 
-  const mw = items
-    .filter((e) => e.kind === 'varint' && e.value >= 1000 && e.value <= 200000)
-    .map((e) => e.value)
-    .sort((a, b) => a - b);
-  if (options.allowAdvanced) {
+  // Power-by-varint inference is too noisy on newer devices (e.g. DELTA 3):
+  // unrelated counters can be interpreted as watts and produce ghost values.
+  // Keep this disabled unless we have a vetted per-model protobuf mapping.
+  if (options.allowAdvanced && options.allowPowerHeuristics) {
+    const mw = items
+      .filter((e) => e.kind === 'varint' && e.value >= 1000 && e.value <= 200000)
+      .map((e) => e.value)
+      .sort((a, b) => a - b);
     if (mw.length > 0) out.outPower = mw[mw.length - 1]! / 1000.0;
     if (mw.length > 1) out.inPower = mw[mw.length - 2]! / 1000.0;
   }
@@ -293,6 +296,7 @@ export function parseEcoflowPayload(rawBuffer: Buffer): {
         // cmdId=50 packets are fuller snapshots; non-50 frames are often partial/noisy.
         const numeric = extractNumericTelemetry(pdata, {
           allowAdvanced: envelope.cmdId === 50,
+          allowPowerHeuristics: false,
         });
         if (numeric) {
           return {
