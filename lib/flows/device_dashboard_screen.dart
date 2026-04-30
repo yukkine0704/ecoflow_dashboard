@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../core/bridge/bridge_models.dart';
 import '../core/bridge/bridge_repository.dart';
 import '../design_system/design_system.dart';
+import 'settings_screen.dart';
 
 class DeviceDashboardScreen extends StatefulWidget {
   const DeviceDashboardScreen({super.key, required this.wsUrl});
@@ -29,10 +30,12 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     status: BridgeConnectionStatus.disconnected,
     message: 'Desconectado',
   );
+  late String _wsUrl;
 
   @override
   void initState() {
     super.initState();
+    _wsUrl = widget.wsUrl;
     _connect();
   }
 
@@ -57,7 +60,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
         if (_selected == null && fleet.isNotEmpty) {
           _selected = fleet.first;
         } else if (_selected != null) {
-          _selected = fleet.where((d) => d.deviceId == _selected!.deviceId).firstOrNull;
+          _selected = fleet
+              .where((d) => d.deviceId == _selected!.deviceId)
+              .firstOrNull;
         }
         _loading = false;
       });
@@ -75,7 +80,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     });
 
     try {
-      await _repository.connect(widget.wsUrl);
+      await _repository.connect(_wsUrl);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -88,6 +93,24 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   Future<void> _reconnect() async {
     await _repository.disconnect();
     await _connect();
+  }
+
+  Future<void> _openSettings() async {
+    final result = await Navigator.of(context).push<SettingsScreenResult>(
+      MaterialPageRoute<SettingsScreenResult>(
+        builder: (_) =>
+            SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
+      ),
+    );
+    if (!mounted || result == null || !result.saved) {
+      return;
+    }
+    setState(() {
+      _wsUrl = result.wsUrl;
+    });
+    if (result.reconnectRequested) {
+      await _reconnect();
+    }
   }
 
   double? _metricAsDouble(String key) {
@@ -119,7 +142,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
 
   AppStatusBadge _powerBadge(String label, double? watts) {
     return AppStatusBadge(
-      label: watts == null ? '$label N/D' : '$label ${watts.toStringAsFixed(0)}W',
+      label: watts == null
+          ? '$label N/D'
+          : '$label ${watts.toStringAsFixed(0)}W',
       tone: watts == null ? AppStatusTone.neutral : AppStatusTone.active,
     );
   }
@@ -128,7 +153,16 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   Widget build(BuildContext context) {
     final snapshot = _selected;
     return Scaffold(
-      appBar: AppBar(title: const Text('Panel del Dispositivo')),
+      appBar: AppBar(
+        title: const Text('Panel del Dispositivo'),
+        actions: [
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings),
+            tooltip: 'Ajustes',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
@@ -137,14 +171,18 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Bridge: ${widget.wsUrl}', style: Theme.of(context).textTheme.bodySmall),
+                Text(
+                  'Bridge: $_wsUrl',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
                 const SizedBox(height: AppSpacing.sm),
                 AppStatusBadge(
                   label: _connectionState.message ?? 'Sin estado',
                   tone: switch (_connectionState.status) {
                     BridgeConnectionStatus.connected => AppStatusTone.active,
                     BridgeConnectionStatus.connecting => AppStatusTone.neutral,
-                    BridgeConnectionStatus.disconnected => AppStatusTone.warning,
+                    BridgeConnectionStatus.disconnected =>
+                      AppStatusTone.warning,
                     BridgeConnectionStatus.error => AppStatusTone.warning,
                   },
                 ),
@@ -154,7 +192,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                     Expanded(
                       child: DropdownButtonFormField<String>(
                         initialValue: snapshot?.deviceId,
-                        decoration: const InputDecoration(labelText: 'Dispositivo'),
+                        decoration: const InputDecoration(
+                          labelText: 'Dispositivo',
+                        ),
                         items: _devices
                             .map(
                               (device) => DropdownMenuItem<String>(
@@ -166,7 +206,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                         onChanged: (value) {
                           if (value == null) return;
                           setState(() {
-                            _selected = _devices.where((d) => d.deviceId == value).firstOrNull;
+                            _selected = _devices
+                                .where((d) => d.deviceId == value)
+                                .firstOrNull;
                           });
                         },
                       ),
@@ -197,7 +239,10 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('No se pudo conectar al bridge', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'No se pudo conectar al bridge',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(_error!, style: Theme.of(context).textTheme.bodySmall),
                 ],
@@ -216,7 +261,10 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(snapshot.displayName, style: Theme.of(context).textTheme.headlineMedium),
+                  Text(
+                    snapshot.displayName,
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Text('ID: ${snapshot.deviceId}'),
                   const SizedBox(height: AppSpacing.xs),
@@ -226,7 +274,10 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
                     children: [
-                      AppStatusBadge(label: _statusLabel(), tone: _statusTone()),
+                      AppStatusBadge(
+                        label: _statusLabel(),
+                        tone: _statusTone(),
+                      ),
                       AppStatusBadge(
                         label: snapshot.batteryPercent == null
                             ? 'Batería N/D'
@@ -238,7 +289,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                                   : AppStatusTone.active),
                       ),
                       _powerBadge('Entrada', snapshot.totalInputW),
-                      _powerBadge('Salida', snapshot.totalOutputW),
+                      _powerBadge('Salida', snapshot.totalOutputW?.abs()),
                     ],
                   ),
                 ],
@@ -250,17 +301,32 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Métricas Clave', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Métricas Clave',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: AppSpacing.md),
                   Wrap(
                     spacing: AppSpacing.sm,
                     runSpacing: AppSpacing.sm,
                     children: [
-                      _powerBadge('In Solar', _metricAsDouble('inputByType.solarW')),
+                      _powerBadge(
+                        'In Solar',
+                        _metricAsDouble('inputByType.solarW'),
+                      ),
                       _powerBadge('In AC', _metricAsDouble('inputByType.acW')),
-                      _powerBadge('In Car', _metricAsDouble('inputByType.carW')),
-                      _powerBadge('Out AC', _metricAsDouble('outputByType.acW')),
-                      _powerBadge('Out DC', _metricAsDouble('outputByType.dcW')),
+                      _powerBadge(
+                        'In Car',
+                        _metricAsDouble('inputByType.carW'),
+                      ),
+                      _powerBadge(
+                        'Out AC',
+                        _metricAsDouble('outputByType.acW'),
+                      ),
+                      _powerBadge(
+                        'Out DC',
+                        _metricAsDouble('outputByType.dcW'),
+                      ),
                       AppStatusBadge(
                         label: _metricAsDouble('battery.maxCellTempC') == null
                             ? 'Temp Celda N/D'
@@ -277,12 +343,21 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
               ),
             ),
             const SizedBox(height: AppSpacing.md),
+            AppGaugeCard.energyBalance(
+              inputW: snapshot.totalInputW,
+              outputW: snapshot.totalOutputW,
+              maxW: 2200,
+            ),
+            const SizedBox(height: AppSpacing.md),
             AppCard(
               surfaceLevel: 1,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Campos del Bridge', style: Theme.of(context).textTheme.titleMedium),
+                  Text(
+                    'Campos del Bridge',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
                   const SizedBox(height: AppSpacing.sm),
                   Wrap(
                     spacing: AppSpacing.sm,
@@ -292,9 +367,8 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                         ..sort((a, b) => a.key.compareTo(b.key));
                       return entries
                           .map(
-                            (entry) => AppChip(
-                              label: '${entry.key}: ${entry.value}',
-                            ),
+                            (entry) =>
+                                AppChip(label: '${entry.key}: ${entry.value}'),
                           )
                           .toList();
                     })(),
@@ -309,7 +383,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                 scrollDirection: Axis.horizontal,
                 child: SelectableText(
                   _prettyMetrics(snapshot.metrics),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontFamily: 'monospace'),
                 ),
               ),
             ),

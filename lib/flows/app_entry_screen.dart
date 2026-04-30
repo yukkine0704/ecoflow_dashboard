@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../core/bridge/bridge_settings_storage.dart';
-import 'device_dashboard_screen.dart';
 import 'onboarding_flow.dart';
+import 'settings_screen.dart';
 
 class AppEntryScreen extends StatefulWidget {
   const AppEntryScreen({super.key});
@@ -13,30 +13,41 @@ class AppEntryScreen extends StatefulWidget {
 
 class _AppEntryScreenState extends State<AppEntryScreen> {
   final BridgeSettingsStorage _settingsStorage = BridgeSettingsStorage();
-  Future<String?>? _storedWsUrlFuture;
+  bool _loading = true;
+  String? _wsUrl;
 
   @override
   void initState() {
     super.initState();
-    _storedWsUrlFuture = _settingsStorage.readStoredWsUrlOrNull();
+    _loadStoredWsUrl();
+  }
+
+  Future<void> _loadStoredWsUrl() async {
+    final wsUrl = await _settingsStorage.readStoredWsUrlOrNull();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _wsUrl = wsUrl;
+      _loading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<String?>(
-      future: _storedWsUrlFuture,
-      builder: (context, snapshot) {
-        if (snapshot.connectionState != ConnectionState.done) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
-        final wsUrl = snapshot.data;
-        if (wsUrl != null && wsUrl.isNotEmpty) {
-          return DeviceDashboardScreen(wsUrl: wsUrl);
-        }
-        return const ApiConfigurationScreen();
+    if (_wsUrl != null && _wsUrl!.isNotEmpty) {
+      return DeviceSelectorScreen(wsUrl: _wsUrl!);
+    }
+
+    return SettingsScreen(
+      onSaved: (result) {
+        setState(() {
+          _wsUrl = result.wsUrl;
+        });
       },
     );
   }

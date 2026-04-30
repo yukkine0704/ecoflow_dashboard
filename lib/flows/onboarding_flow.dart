@@ -7,6 +7,7 @@ import '../core/bridge/bridge_settings_storage.dart';
 import '../core/bridge/bridge_models.dart';
 import '../design_system/design_system.dart';
 import 'device_detail_screen.dart';
+import 'settings_screen.dart';
 
 class ApiConfigurationScreen extends StatefulWidget {
   const ApiConfigurationScreen({super.key});
@@ -214,10 +215,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     status: BridgeConnectionStatus.disconnected,
     message: 'Desconectado',
   );
+  late String _wsUrl;
 
   @override
   void initState() {
     super.initState();
+    _wsUrl = widget.wsUrl;
     _connect();
   }
 
@@ -279,7 +282,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     });
 
     try {
-      await _repository.connect(widget.wsUrl);
+      await _repository.connect(_wsUrl);
     } catch (error) {
       if (!mounted) {
         return;
@@ -307,6 +310,24 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   Future<void> _reconnect() async {
     await _repository.disconnect();
     await _connect();
+  }
+
+  Future<void> _openSettings() async {
+    final result = await Navigator.of(context).push<SettingsScreenResult>(
+      MaterialPageRoute<SettingsScreenResult>(
+        builder: (_) =>
+            SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
+      ),
+    );
+    if (!mounted || result == null || !result.saved) {
+      return;
+    }
+    setState(() {
+      _wsUrl = result.wsUrl;
+    });
+    if (result.reconnectRequested) {
+      await _reconnect();
+    }
   }
 
   List<BridgeDeviceSnapshot> _filteredDevices(
@@ -495,7 +516,9 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     AppStatusTone tone = AppStatusTone.active,
   }) {
     return AppStatusBadge(
-      label: watts == null ? '$label N/D' : '$label ${watts.toStringAsFixed(0)}W',
+      label: watts == null
+          ? '$label N/D'
+          : '$label ${watts.toStringAsFixed(0)}W',
       tone: watts == null ? AppStatusTone.neutral : tone,
     );
   }
@@ -504,7 +527,16 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   Widget build(BuildContext context) {
     final visibleDevices = _filteredDevices(_devices);
     return Scaffold(
-      appBar: AppBar(title: const Text('Selector de dispositivos')),
+      appBar: AppBar(
+        title: const Text('Selector de dispositivos'),
+        actions: [
+          IconButton(
+            onPressed: _openSettings,
+            icon: const Icon(Icons.settings),
+            tooltip: 'Ajustes',
+          ),
+        ],
+      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -529,7 +561,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'WS: ${widget.wsUrl}',
+                  'WS: $_wsUrl',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -651,14 +683,17 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                           AppStatusBadge(
                             label: device.totalOutputW == null
                                 ? 'Salida N/D'
-                                : 'Salida ${device.totalOutputW!.toStringAsFixed(0)}W',
+                                : 'Salida ${device.totalOutputW!.abs().toStringAsFixed(0)}W',
                             tone: device.totalOutputW == null
                                 ? AppStatusTone.neutral
                                 : AppStatusTone.active,
                           ),
                           _typedPowerBadge(
                             label: 'In Solar',
-                            watts: _metricAsDouble(device, 'inputByType.solarW'),
+                            watts: _metricAsDouble(
+                              device,
+                              'inputByType.solarW',
+                            ),
                           ),
                           _typedPowerBadge(
                             label: 'In AC',
@@ -673,12 +708,26 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                             watts: _metricAsDouble(device, 'outputByType.dcW'),
                           ),
                           AppStatusBadge(
-                            label: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                            label:
+                                _metricAsDouble(
+                                      device,
+                                      'battery.maxCellTempC',
+                                    ) ==
+                                    null
                                 ? 'Celda Max N/D'
                                 : 'Celda Max ${_metricAsDouble(device, 'battery.maxCellTempC')!.toStringAsFixed(1)}°C',
-                            tone: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                            tone:
+                                _metricAsDouble(
+                                      device,
+                                      'battery.maxCellTempC',
+                                    ) ==
+                                    null
                                 ? AppStatusTone.neutral
-                                : (_metricAsDouble(device, 'battery.maxCellTempC')! >= 45
+                                : (_metricAsDouble(
+                                            device,
+                                            'battery.maxCellTempC',
+                                          )! >=
+                                          45
                                       ? AppStatusTone.warning
                                       : AppStatusTone.active),
                           ),

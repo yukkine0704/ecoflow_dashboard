@@ -67,7 +67,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     debugPrint(header);
     const chunkSize = 900;
     for (var i = 0; i < pretty.length; i += chunkSize) {
-      final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
+      final end = (i + chunkSize < pretty.length)
+          ? i + chunkSize
+          : pretty.length;
       debugPrint(pretty.substring(i, end));
     }
     debugPrint('[RAW_METRICS_END][${_snapshot.deviceId}]');
@@ -112,7 +114,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   AppStatusBadge _powerBadge(String label, double? watts) {
     return AppStatusBadge(
-      label: watts == null ? '$label N/D' : '$label ${watts.toStringAsFixed(0)}W',
+      label: watts == null
+          ? '$label N/D'
+          : '$label ${watts.toStringAsFixed(0)}W',
       tone: watts == null ? AppStatusTone.neutral : AppStatusTone.active,
     );
   }
@@ -152,6 +156,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                 Text('Actualizado: ${_formatTimestamp(_snapshot.updatedAt)}'),
               ],
             ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppGaugeCard.energyBalance(
+            inputW: _snapshot.totalInputW,
+            outputW: _snapshot.totalOutputW,
+            maxW: 2200,
           ),
           const SizedBox(height: AppSpacing.md),
           AppCard(
@@ -209,7 +219,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                     AppStatusBadge(
                       label: _snapshot.totalOutputW == null
                           ? 'Salida total N/D'
-                          : 'Salida total ${_snapshot.totalOutputW!.toStringAsFixed(0)}W',
+                          : 'Salida total ${_snapshot.totalOutputW!.abs().toStringAsFixed(0)}W',
                       tone: _snapshot.totalOutputW == null
                           ? AppStatusTone.neutral
                           : AppStatusTone.active,
@@ -245,7 +255,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                   children: [
                     _powerBadge('AC', _metricAsDouble('outputByType.acW')),
                     _powerBadge('DC', _metricAsDouble('outputByType.dcW')),
-                    _powerBadge('Other', _metricAsDouble('outputByType.otherW')),
+                    _powerBadge(
+                      'Other',
+                      _metricAsDouble('outputByType.otherW'),
+                    ),
                   ],
                 ),
               ],
