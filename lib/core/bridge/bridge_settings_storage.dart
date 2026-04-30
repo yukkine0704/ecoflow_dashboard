@@ -18,6 +18,15 @@ class BridgeSettingsStorage {
     return value;
   }
 
+  Future<String?> readStoredWsUrlOrNull() async {
+    final raw = await _storage.read(key: _wsUrlKey);
+    final value = raw?.trim();
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    return value;
+  }
+
   Future<void> writeWsUrl(String wsUrl) {
     return _storage.write(key: _wsUrlKey, value: wsUrl.trim());
   }

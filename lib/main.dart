@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'design_system/design_system.dart';
-import 'flows/onboarding_flow.dart';
+import 'flows/app_entry_screen.dart';
 
 void main() {
   runApp(const EcoFlowApp());
@@ -22,7 +22,7 @@ class EcoFlowApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: const ApiConfigurationScreen(),
+      home: const AppEntryScreen(),
     );
   }
 }
