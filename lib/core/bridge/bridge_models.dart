@@ -73,8 +73,9 @@ class BridgeDeviceSnapshot {
   static int? _asInt(Object? value) {
     if (value is int) return value;
     if (value is double) return value.round();
-    if (value is String)
+    if (value is String) {
       return int.tryParse(value) ?? double.tryParse(value)?.round();
+    }
     return null;
   }
 
@@ -93,13 +94,15 @@ class BridgeDeviceSnapshot {
       if (normalized == 'true' ||
           normalized == 'online' ||
           normalized == 'on' ||
-          normalized == '1')
+          normalized == '1') {
         return true;
+      }
       if (normalized == 'false' ||
           normalized == 'offline' ||
           normalized == 'off' ||
-          normalized == '0')
+          normalized == '0') {
         return false;
+      }
     }
     return null;
   }
