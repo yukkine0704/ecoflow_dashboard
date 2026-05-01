@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../core/bridge/bridge_models.dart';
 import '../core/bridge/bridge_repository.dart';
 import '../core/bridge/bridge_settings_storage.dart';
-import '../core/bridge/bridge_models.dart';
 import '../design_system/design_system.dart';
 import 'device_detail_screen.dart';
 import 'settings_screen.dart';
@@ -47,7 +47,7 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
         return;
       }
       appGooeyToast.warning(
-        'No se pudo cargar la configuración',
+        'We could not load your connection settings',
         config: const AppToastConfig(meta: 'BRIDGE WS'),
       );
       _wsUrlController.text = 'ws://127.0.0.1:8787/ws';
@@ -61,14 +61,14 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
   String? _validateWsUrl() {
     final candidate = _wsUrlController.text.trim();
     if (candidate.isEmpty) {
-      return 'Ingresa la URL WebSocket del bridge';
+      return 'Enter your bridge WebSocket URL.';
     }
     final uri = Uri.tryParse(candidate);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      return 'La URL no es valida';
+      return 'This URL format does not look valid.';
     }
     if (uri.scheme != 'ws' && uri.scheme != 'wss') {
-      return 'La URL debe usar ws o wss';
+      return 'Use a URL that starts with ws:// or wss://.';
     }
     return null;
   }
@@ -77,7 +77,7 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
     final error = _validateWsUrl();
     if (error != null) {
       appGooeyToast.error(
-        'URL invalida',
+        'Connection URL needed',
         config: AppToastConfig(description: error, meta: 'BRIDGE WS'),
       );
       return false;
@@ -88,19 +88,19 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
 
     setState(() => _saving = true);
     try {
-      await _settingsStorage.writeWsUrl(_wsUrlController.text);
+      await _settingsStorage.writeWsUrl(_wsUrlController.text.trim());
       if (!mounted) {
         return true;
       }
       appGooeyToast.success(
-        'Configuración guardada',
+        'Connection saved',
         config: const AppToastConfig(meta: 'BRIDGE WS'),
       );
       return true;
     } catch (error) {
       if (mounted) {
         appGooeyToast.error(
-          'No se pudo guardar',
+          'Could not save settings',
           config: AppToastConfig(description: '$error', meta: 'BRIDGE WS'),
         );
       }
@@ -120,8 +120,7 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
 
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            DeviceSelectorScreen(wsUrl: _wsUrlController.text.trim()),
+        builder: (_) => DeviceSelectorScreen(wsUrl: _wsUrlController.text.trim()),
       ),
     );
   }
@@ -129,7 +128,7 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Configuración Bridge WS')),
+      appBar: AppBar(title: const Text('Get Started')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -139,47 +138,91 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Connect Your Local Bridge',
+                  'Bring your EcoFlow devices to life',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Conecta la app al bridge directo de EcoFlow para leer telemetría en tiempo real.',
+                  'Connect once, then monitor your devices in real time from one place.',
                   style: Theme.of(context).textTheme.bodyMedium,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppStatusBadge(
+                  label: 'Step 1 of 2: Bridge connection',
+                  tone: AppStatusTone.neutral,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 if (_loading)
                   Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: Text(
-                      'Cargando configuración...',
+                      'Loading your saved connection...',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                 AppTextField(
                   controller: _wsUrlController,
-                  label: 'Bridge WebSocket URL',
+                  label: 'Connection URL',
                   hintText: 'ws://127.0.0.1:8787/ws',
-                  prefixIcon: Icons.link,
+                  prefixIcon: Icons.wifi_tethering,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Tip: keep your local bridge running before you continue.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Advanced settings',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  subtitle: Text(
+                    'Technical details and protocol requirements',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  children: [
+                    AppCard(
+                      surfaceLevel: 2,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Accepted protocol: ws:// or wss://',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Default local endpoint: ws://127.0.0.1:8787/ws',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'If connection fails, verify bridge availability and firewall permissions.',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AppButton(
-                  label: 'Guardar',
-                  variant: AppButtonVariant.secondary,
+                  label: 'Connect and continue',
                   fullWidth: true,
+                  trailing: const Icon(Icons.arrow_forward),
                   loading: _saving,
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          _saveConfiguration();
-                        },
+                  onPressed: _saving ? null : _continueToSelector,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 AppButton(
-                  label: 'Conectar y abrir dashboard',
+                  label: 'Save for later',
+                  variant: AppButtonVariant.secondary,
                   fullWidth: true,
-                  trailing: const Icon(Icons.wifi_tethering),
-                  onPressed: _saving ? null : _continueToSelector,
+                  onPressed: _saving ? null : _saveConfiguration,
                 ),
               ],
             ),
@@ -213,7 +256,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   String? _selectedDeviceId;
   BridgeConnectionState _connectionState = const BridgeConnectionState(
     status: BridgeConnectionStatus.disconnected,
-    message: 'Desconectado',
+    message: 'Disconnected',
   );
   late String _wsUrl;
 
@@ -249,9 +292,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
           _visibleDeviceIds.addAll(fleet.map((device) => device.deviceId));
         }
         final filtered = _filteredDevices(fleet);
-        _selectedDeviceId ??= filtered.isNotEmpty
-            ? filtered.first.deviceId
-            : null;
+        _selectedDeviceId ??= filtered.isNotEmpty ? filtered.first.deviceId : null;
         _loading = false;
       });
     });
@@ -315,8 +356,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   Future<void> _openSettings() async {
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
-        builder: (_) =>
-            SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
+        builder: (_) => SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
       ),
     );
     if (!mounted || result == null || !result.saved) {
@@ -330,43 +370,37 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     }
   }
 
-  List<BridgeDeviceSnapshot> _filteredDevices(
-    List<BridgeDeviceSnapshot> source,
-  ) {
+  List<BridgeDeviceSnapshot> _filteredDevices(List<BridgeDeviceSnapshot> source) {
     if (_visibleDeviceIds.isEmpty) {
       return source;
     }
-    return source
-        .where((device) => _visibleDeviceIds.contains(device.deviceId))
-        .toList();
+    return source.where((device) => _visibleDeviceIds.contains(device.deviceId)).toList();
   }
 
   Future<void> _openDevicePicker() async {
     final source = _catalog.isNotEmpty
         ? _catalog
         : _devices
-              .map(
-                (device) => BridgeCatalogItem(
-                  deviceId: device.deviceId,
-                  displayName: device.displayName,
-                  model: device.model,
-                  imageUrl: device.imageUrl,
-                ),
-              )
-              .toList();
+            .map(
+              (device) => BridgeCatalogItem(
+                deviceId: device.deviceId,
+                displayName: device.displayName,
+                model: device.model,
+                imageUrl: device.imageUrl,
+              ),
+            )
+            .toList();
 
     if (source.isEmpty) {
       appGooeyToast.warning(
-        'No hay catálogo disponible todavía',
+        'Your device catalog is not ready yet',
         config: const AppToastConfig(meta: 'DEVICE PICKER'),
       );
       return;
     }
 
     final workingSet = Set<String>.from(
-      _visibleDeviceIds.isEmpty
-          ? source.map((item) => item.deviceId)
-          : _visibleDeviceIds,
+      _visibleDeviceIds.isEmpty ? source.map((item) => item.deviceId) : _visibleDeviceIds,
     );
 
     await showModalBottomSheet<void>(
@@ -385,7 +419,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Selecciona dispositivos',
+                            'Choose devices to show',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ),
@@ -397,7 +431,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                                 ..addAll(source.map((item) => item.deviceId));
                             });
                           },
-                          child: const Text('Todos'),
+                          child: const Text('Select all'),
                         ),
                       ],
                     ),
@@ -419,9 +453,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                               });
                             },
                             title: Text(item.displayName),
-                            subtitle: Text(
-                              '${item.model ?? 'Modelo N/D'} • ${item.deviceId}',
-                            ),
+                            subtitle: Text(item.model ?? 'Model unavailable'),
                             controlAffinity: ListTileControlAffinity.leading,
                           );
                         }).toList(),
@@ -432,7 +464,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                       children: [
                         Expanded(
                           child: AppButton(
-                            label: 'Cancelar',
+                            label: 'Cancel',
                             variant: AppButtonVariant.secondary,
                             onPressed: () => Navigator.of(context).pop(),
                           ),
@@ -440,7 +472,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: AppButton(
-                            label: 'Aplicar',
+                            label: 'Apply',
                             onPressed: () {
                               if (workingSet.isEmpty) {
                                 return;
@@ -451,9 +483,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                                   ..addAll(workingSet);
                                 final filtered = _filteredDevices(_devices);
                                 if (filtered.isNotEmpty &&
-                                    !_visibleDeviceIds.contains(
-                                      _selectedDeviceId,
-                                    )) {
+                                    !_visibleDeviceIds.contains(_selectedDeviceId)) {
                                   _selectedDeviceId = filtered.first.deviceId;
                                 }
                               });
@@ -489,13 +519,13 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   String _labelFromConnection(BridgeConnectionStatus status) {
     switch (status) {
       case BridgeConnectionStatus.connected:
-        return 'Bridge conectado';
+        return 'Connected to bridge';
       case BridgeConnectionStatus.connecting:
-        return 'Conectando bridge...';
+        return 'Connecting to bridge...';
       case BridgeConnectionStatus.error:
-        return 'Error de conexión';
+        return 'Connection issue';
       case BridgeConnectionStatus.disconnected:
-        return 'Bridge desconectado';
+        return 'Bridge disconnected';
     }
   }
 
@@ -516,9 +546,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     AppStatusTone tone = AppStatusTone.active,
   }) {
     return AppStatusBadge(
-      label: watts == null
-          ? '$label N/D'
-          : '$label ${watts.toStringAsFixed(0)}W',
+      label: watts == null ? '$label n/a' : '$label ${watts.toStringAsFixed(0)}W',
       tone: watts == null ? AppStatusTone.neutral : tone,
     );
   }
@@ -528,12 +556,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     final visibleDevices = _filteredDevices(_devices);
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Selector de dispositivos'),
+        title: const Text('Your devices'),
         actions: [
           IconButton(
             onPressed: _openSettings,
             icon: const Icon(Icons.settings),
-            tooltip: 'Ajustes',
+            tooltip: 'Connection settings',
           ),
         ],
       ),
@@ -546,12 +574,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Your Ecosystem',
+                  'Choose what you want to monitor',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Selecciona el dispositivo que quieres monitorear en tiempo real desde el bridge local.',
+                  'Pick the devices you care about now. You can change this anytime.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -559,36 +587,71 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                   label: _labelFromConnection(_connectionState.status),
                   tone: _toneFromConnection(_connectionState.status),
                 ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'WS: $_wsUrl',
-                  style: Theme.of(context).textTheme.bodySmall,
+                const SizedBox(height: AppSpacing.md),
+                Row(
+                  children: [
+                    Expanded(
+                      child: AppButton(
+                        label: 'Reconnect',
+                        size: AppButtonSize.small,
+                        variant: AppButtonVariant.secondary,
+                        onPressed: _reconnect,
+                      ),
+                    ),
+                    const SizedBox(width: AppSpacing.sm),
+                    Expanded(
+                      child: AppButton(
+                        label: 'Choose devices',
+                        size: AppButtonSize.small,
+                        variant: AppButtonVariant.tertiary,
+                        onPressed: _openDevicePicker,
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.md),
-                AppButton(
-                  label: 'Reconectar',
-                  size: AppButtonSize.small,
-                  variant: AppButtonVariant.secondary,
-                  onPressed: () {
-                    _reconnect();
-                  },
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                AppButton(
-                  label: 'Elegir dispositivos',
-                  size: AppButtonSize.small,
-                  variant: AppButtonVariant.tertiary,
-                  onPressed: _openDevicePicker,
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Advanced connection details',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  subtitle: Text(
+                    'WebSocket endpoint and technical status',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  children: [
+                    AppCard(
+                      surfaceLevel: 2,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('WebSocket URL', style: Theme.of(context).textTheme.bodySmall),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(_wsUrl, style: Theme.of(context).textTheme.bodyMedium),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
           const SizedBox(height: AppSpacing.md),
           if (_loading)
-            const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24),
-                child: CircularProgressIndicator(),
+            AppCard(
+              surfaceLevel: 1,
+              child: Column(
+                children: [
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: AppSpacing.md),
+                  Text(
+                    'Syncing your devices...',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
             )
           else if (_error != null)
@@ -598,14 +661,19 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'No se pudo conectar al bridge',
+                    'We could not reach your bridge',
                     style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Check your bridge and network, then try reconnecting.',
+                    style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(_error!, style: Theme.of(context).textTheme.bodySmall),
                   const SizedBox(height: AppSpacing.md),
                   AppButton(
-                    label: 'Reintentar',
+                    label: 'Try again',
                     onPressed: _reconnect,
                     variant: AppButtonVariant.secondary,
                   ),
@@ -614,21 +682,33 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
             )
           else if (visibleDevices.isEmpty)
             AppCard(
-              child: Text(
-                'Aún no hay dispositivos visibles. Abre "Elegir dispositivos" o espera catálogo del bridge.',
-                style: Theme.of(context).textTheme.bodyMedium,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'No devices visible yet',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Open "Choose devices" or wait a moment while your catalog loads.',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
               ),
             )
           else ...[
             AppCard(
               child: Text(
-                'Dispositivos visibles: ${visibleDevices.length} / ${_devices.length}',
+                'Showing ${visibleDevices.length} of ${_devices.length} devices',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
             ),
             const SizedBox(height: AppSpacing.md),
             ...visibleDevices.map((device) {
               final selected = _selectedDeviceId == device.deviceId;
+              final battery = device.batteryPercent;
+              final online = device.online;
               return Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.sm),
                 child: AppCard(
@@ -639,97 +719,96 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        device.displayName,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.sm),
-                      Text('ID: ${device.deviceId}'),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text('Modelo: ${device.model ?? 'N/D'}'),
+                      Text(device.displayName, style: Theme.of(context).textTheme.titleMedium),
                       const SizedBox(height: AppSpacing.sm),
                       Wrap(
                         spacing: AppSpacing.sm,
                         runSpacing: AppSpacing.sm,
                         children: [
                           AppStatusBadge(
-                            label: device.online == null
-                                ? 'Estado N/D'
-                                : (device.online! ? 'Online' : 'Offline'),
-                            tone: device.online == null
+                            label: online == null ? 'Status unknown' : (online ? 'Online' : 'Offline'),
+                            tone: online == null
                                 ? AppStatusTone.neutral
-                                : (device.online!
-                                      ? AppStatusTone.active
-                                      : AppStatusTone.warning),
+                                : (online ? AppStatusTone.active : AppStatusTone.warning),
                           ),
                           AppStatusBadge(
-                            label: device.batteryPercent == null
-                                ? 'Batería N/D'
-                                : 'Batería ${device.batteryPercent}%',
-                            tone: device.batteryPercent == null
+                            label: battery == null ? 'Battery n/a' : 'Battery $battery%',
+                            tone: battery == null
                                 ? AppStatusTone.neutral
-                                : ((device.batteryPercent ?? 100) < 25
-                                      ? AppStatusTone.warning
-                                      : AppStatusTone.active),
+                                : (battery < 25 ? AppStatusTone.warning : AppStatusTone.active),
                           ),
-                          AppStatusBadge(
-                            label: device.totalInputW == null
-                                ? 'Entrada N/D'
-                                : 'Entrada ${device.totalInputW!.toStringAsFixed(0)}W',
-                            tone: device.totalInputW == null
-                                ? AppStatusTone.neutral
-                                : AppStatusTone.active,
-                          ),
-                          AppStatusBadge(
-                            label: device.totalOutputW == null
-                                ? 'Salida N/D'
-                                : 'Salida ${device.totalOutputW!.abs().toStringAsFixed(0)}W',
-                            tone: device.totalOutputW == null
-                                ? AppStatusTone.neutral
-                                : AppStatusTone.active,
-                          ),
-                          _typedPowerBadge(
-                            label: 'In Solar',
-                            watts: _metricAsDouble(
-                              device,
-                              'inputByType.solarW',
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      ExpansionTile(
+                        tilePadding: EdgeInsets.zero,
+                        childrenPadding: EdgeInsets.zero,
+                        title: Text(
+                          'Advanced device details',
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        subtitle: Text(
+                          'Model, ID and live power metrics',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        children: [
+                          AppCard(
+                            surfaceLevel: 2,
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Device ID: ${device.deviceId}'),
+                                const SizedBox(height: AppSpacing.xs),
+                                Text('Model: ${device.model ?? 'n/a'}'),
+                                const SizedBox(height: AppSpacing.sm),
+                                Wrap(
+                                  spacing: AppSpacing.sm,
+                                  runSpacing: AppSpacing.sm,
+                                  children: [
+                                    AppStatusBadge(
+                                      label: device.totalInputW == null
+                                          ? 'Input n/a'
+                                          : 'Input ${device.totalInputW!.toStringAsFixed(0)}W',
+                                      tone: device.totalInputW == null ? AppStatusTone.neutral : AppStatusTone.active,
+                                    ),
+                                    AppStatusBadge(
+                                      label: device.totalOutputW == null
+                                          ? 'Output n/a'
+                                          : 'Output ${device.totalOutputW!.abs().toStringAsFixed(0)}W',
+                                      tone:
+                                          device.totalOutputW == null ? AppStatusTone.neutral : AppStatusTone.active,
+                                    ),
+                                    _typedPowerBadge(
+                                      label: 'Solar in',
+                                      watts: _metricAsDouble(device, 'inputByType.solarW'),
+                                    ),
+                                    _typedPowerBadge(
+                                      label: 'AC in',
+                                      watts: _metricAsDouble(device, 'inputByType.acW'),
+                                    ),
+                                    _typedPowerBadge(
+                                      label: 'AC out',
+                                      watts: _metricAsDouble(device, 'outputByType.acW'),
+                                    ),
+                                    _typedPowerBadge(
+                                      label: 'DC out',
+                                      watts: _metricAsDouble(device, 'outputByType.dcW'),
+                                    ),
+                                    AppStatusBadge(
+                                      label: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                                          ? 'Max cell temp n/a'
+                                          : 'Max cell temp ${_metricAsDouble(device, 'battery.maxCellTempC')!.toStringAsFixed(1)}°C',
+                                      tone: _metricAsDouble(device, 'battery.maxCellTempC') == null
+                                          ? AppStatusTone.neutral
+                                          : (_metricAsDouble(device, 'battery.maxCellTempC')! >= 45
+                                              ? AppStatusTone.warning
+                                              : AppStatusTone.active),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
-                          ),
-                          _typedPowerBadge(
-                            label: 'In AC',
-                            watts: _metricAsDouble(device, 'inputByType.acW'),
-                          ),
-                          _typedPowerBadge(
-                            label: 'Out AC',
-                            watts: _metricAsDouble(device, 'outputByType.acW'),
-                          ),
-                          _typedPowerBadge(
-                            label: 'Out DC',
-                            watts: _metricAsDouble(device, 'outputByType.dcW'),
-                          ),
-                          AppStatusBadge(
-                            label:
-                                _metricAsDouble(
-                                      device,
-                                      'battery.maxCellTempC',
-                                    ) ==
-                                    null
-                                ? 'Celda Max N/D'
-                                : 'Celda Max ${_metricAsDouble(device, 'battery.maxCellTempC')!.toStringAsFixed(1)}°C',
-                            tone:
-                                _metricAsDouble(
-                                      device,
-                                      'battery.maxCellTempC',
-                                    ) ==
-                                    null
-                                ? AppStatusTone.neutral
-                                : (_metricAsDouble(
-                                            device,
-                                            'battery.maxCellTempC',
-                                          )! >=
-                                          45
-                                      ? AppStatusTone.warning
-                                      : AppStatusTone.active),
                           ),
                         ],
                       ),

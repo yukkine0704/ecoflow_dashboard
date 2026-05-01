@@ -63,7 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       _wsUrlController.text = 'ws://127.0.0.1:8787/ws';
       appGooeyToast.warning(
-        'No se pudo cargar la configuración',
+        'We could not load your saved connection',
         config: const AppToastConfig(meta: 'SETTINGS'),
       );
     } finally {
@@ -76,14 +76,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _validateWsUrl() {
     final candidate = _wsUrlController.text.trim();
     if (candidate.isEmpty) {
-      return 'Ingresa la URL WebSocket del bridge';
+      return 'Enter your bridge WebSocket URL.';
     }
     final uri = Uri.tryParse(candidate);
     if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      return 'La URL no es válida';
+      return 'This URL format does not look valid.';
     }
     if (uri.scheme != 'ws' && uri.scheme != 'wss') {
-      return 'La URL debe usar ws o wss';
+      return 'Use a URL that starts with ws:// or wss://.';
     }
     return null;
   }
@@ -92,7 +92,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final error = _validateWsUrl();
     if (error != null) {
       appGooeyToast.error(
-        'URL inválida',
+        'Connection URL needed',
         config: AppToastConfig(description: error, meta: 'SETTINGS'),
       );
       return false;
@@ -109,14 +109,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return true;
       }
       appGooeyToast.success(
-        'Configuración guardada',
+        'Connection saved',
         config: const AppToastConfig(meta: 'SETTINGS'),
       );
       return true;
     } catch (error) {
       if (mounted) {
         appGooeyToast.error(
-          'No se pudo guardar',
+          'Could not save settings',
           config: AppToastConfig(description: '$error', meta: 'SETTINGS'),
         );
       }
@@ -148,7 +148,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Ajustes')),
+      appBar: AppBar(title: const Text('Connection settings')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
         children: [
@@ -158,12 +158,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Bridge WebSocket',
+                  'Manage bridge connection',
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Configura la URL del bridge local para recibir telemetría en tiempo real.',
+                  'Update where the app connects for live device data.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: AppSpacing.lg),
@@ -171,50 +171,76 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.md),
                     child: Text(
-                      'Cargando configuración...',
+                      'Loading your saved connection...',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ),
                 AppTextField(
                   controller: _wsUrlController,
-                  label: 'Bridge WebSocket URL',
+                  label: 'Connection URL',
                   hintText: 'ws://127.0.0.1:8787/ws',
-                  prefixIcon: Icons.link,
+                  prefixIcon: Icons.wifi_tethering,
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'You can keep this default URL if your bridge runs locally.',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: Text(
+                    'Advanced settings',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  subtitle: Text(
+                    'Protocol and troubleshooting details',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  children: [
+                    AppCard(
+                      surfaceLevel: 2,
+                      padding: const EdgeInsets.all(AppSpacing.md),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Accepted protocol: ws:// or wss://',
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                          const SizedBox(height: AppSpacing.xs),
+                          Text(
+                            'Default local endpoint: ws://127.0.0.1:8787/ws',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 AppButton(
-                  label: 'Guardar',
+                  label: 'Save connection',
                   variant: AppButtonVariant.secondary,
                   fullWidth: true,
                   loading: _saving,
-                  onPressed: _saving
-                      ? null
-                      : () {
-                          _saveConfiguration();
-                        },
+                  onPressed: _saving ? null : _saveConfiguration,
                 ),
                 if (widget.allowReconnect) ...[
                   const SizedBox(height: AppSpacing.sm),
                   AppButton(
-                    label: 'Guardar y reconectar',
+                    label: 'Save and reconnect',
                     fullWidth: true,
-                    trailing: const Icon(Icons.wifi_tethering),
-                    onPressed: _saving
-                        ? null
-                        : () {
-                            _saveAndClose(reconnectRequested: true);
-                          },
+                    trailing: const Icon(Icons.refresh),
+                    onPressed: _saving ? null : () => _saveAndClose(reconnectRequested: true),
                   ),
                 ] else ...[
                   const SizedBox(height: AppSpacing.sm),
                   AppButton(
-                    label: 'Guardar y continuar',
+                    label: 'Save and continue',
                     fullWidth: true,
-                    onPressed: _saving
-                        ? null
-                        : () {
-                            _saveAndClose(reconnectRequested: false);
-                          },
+                    onPressed: _saving ? null : () => _saveAndClose(reconnectRequested: false),
                   ),
                 ],
               ],
