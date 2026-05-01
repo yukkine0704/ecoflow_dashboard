@@ -8,6 +8,7 @@ import '../core/bridge/bridge_settings_storage.dart';
 import '../design_system/design_system.dart';
 import 'device_detail_screen.dart';
 import 'settings_screen.dart';
+import 'widgets/device_selection_card.dart';
 
 class ApiConfigurationScreen extends StatefulWidget {
   const ApiConfigurationScreen({super.key});
@@ -541,112 +542,86 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     }
   }
 
-  double? _metricAsDouble(BridgeDeviceSnapshot device, String key) {
-    final raw = device.metrics[key];
-    if (raw is num) {
-      return raw.toDouble();
-    }
-    if (raw is String) {
-      return double.tryParse(raw);
-    }
-    return null;
-  }
-
-  AppStatusBadge _typedPowerBadge({
-    required String label,
-    required double? watts,
-    AppStatusTone tone = AppStatusTone.active,
-  }) {
-    return AppStatusBadge(
-      label: watts == null ? '$label n/a' : '$label ${watts.toStringAsFixed(0)}W',
-      tone: watts == null ? AppStatusTone.neutral : tone,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final visibleDevices = _filteredDevices(_devices);
+    final colors = Theme.of(context).colorScheme;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Your devices'),
+        centerTitle: true,
+        leading: IconButton(
+          onPressed: _openSettings,
+          icon: const Icon(Icons.menu_rounded),
+          tooltip: 'Menu',
+        ),
+        title: Text(
+          'Your devices',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.w800,
+            color: colors.primary,
+          ),
+        ),
         actions: [
           IconButton(
-            onPressed: _openSettings,
-            icon: const Icon(Icons.settings),
-            tooltip: 'Connection settings',
+            onPressed: _reconnect,
+            icon: const Icon(Icons.sync_rounded),
+            tooltip: 'Reconnect',
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+        padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
         children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Energy Hub',
+                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        height: 0.95,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          Text(
+            'Manage and monitor your power grid.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.md),
+          AppButton(
+            label: 'Reconnect system',
+            size: AppButtonSize.small,
+            variant: AppButtonVariant.tertiary,
+            leading: const Icon(Icons.cable_rounded),
+            onPressed: _reconnect,
+          ),
+          const SizedBox(height: AppSpacing.md),
           AppCard(
             surfaceLevel: 1,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Choose what you want to monitor',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Pick the devices you care about now. You can change this anytime.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: AppSpacing.md),
                 AppStatusBadge(
                   label: _labelFromConnection(_connectionState.status),
                   tone: _toneFromConnection(_connectionState.status),
                 ),
                 const SizedBox(height: AppSpacing.md),
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppButton(
-                        label: 'Reconnect',
-                        size: AppButtonSize.small,
-                        variant: AppButtonVariant.secondary,
-                        onPressed: _reconnect,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: AppButton(
-                        label: 'Choose devices',
-                        size: AppButtonSize.small,
-                        variant: AppButtonVariant.tertiary,
-                        onPressed: _openDevicePicker,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Advanced connection details',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  subtitle: Text(
-                    'WebSocket endpoint and technical status',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  children: [
-                    AppCard(
-                      surfaceLevel: 2,
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('WebSocket URL', style: Theme.of(context).textTheme.bodySmall),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(_wsUrl, style: Theme.of(context).textTheme.bodyMedium),
-                        ],
-                      ),
-                    ),
-                  ],
+                AppButton(
+                  label: 'Choose devices',
+                  size: AppButtonSize.small,
+                  variant: AppButtonVariant.secondary,
+                  onPressed: _openDevicePicker,
                 ),
               ],
             ),
@@ -719,113 +694,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
             const SizedBox(height: AppSpacing.md),
             ...visibleDevices.map((device) {
               final selected = _selectedDeviceId == device.deviceId;
-              final battery = device.batteryPercent;
-              final online = device.online;
               return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: AppCard(
-                  surfaceLevel: selected ? 2 : 1,
-                  onTap: () {
-                    _openDeviceDetail(device);
-                  },
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(device.displayName, style: Theme.of(context).textTheme.titleMedium),
-                      const SizedBox(height: AppSpacing.sm),
-                      Wrap(
-                        spacing: AppSpacing.sm,
-                        runSpacing: AppSpacing.sm,
-                        children: [
-                          AppStatusBadge(
-                            label: online == null ? 'Status unknown' : (online ? 'Online' : 'Offline'),
-                            tone: online == null
-                                ? AppStatusTone.neutral
-                                : (online ? AppStatusTone.active : AppStatusTone.warning),
-                          ),
-                          AppStatusBadge(
-                            label: battery == null ? 'Battery n/a' : 'Battery $battery%',
-                            tone: battery == null
-                                ? AppStatusTone.neutral
-                                : (battery < 25 ? AppStatusTone.warning : AppStatusTone.active),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      ExpansionTile(
-                        tilePadding: EdgeInsets.zero,
-                        childrenPadding: EdgeInsets.zero,
-                        title: Text(
-                          'Advanced device details',
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        subtitle: Text(
-                          'Model, ID and live power metrics',
-                          style: Theme.of(context).textTheme.bodySmall,
-                        ),
-                        children: [
-                          AppCard(
-                            surfaceLevel: 2,
-                            padding: const EdgeInsets.all(AppSpacing.md),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Device ID: ${device.deviceId}'),
-                                const SizedBox(height: AppSpacing.xs),
-                                Text('Model: ${device.model ?? 'n/a'}'),
-                                const SizedBox(height: AppSpacing.sm),
-                                Wrap(
-                                  spacing: AppSpacing.sm,
-                                  runSpacing: AppSpacing.sm,
-                                  children: [
-                                    AppStatusBadge(
-                                      label: device.totalInputW == null
-                                          ? 'Input n/a'
-                                          : 'Input ${device.totalInputW!.toStringAsFixed(0)}W',
-                                      tone: device.totalInputW == null ? AppStatusTone.neutral : AppStatusTone.active,
-                                    ),
-                                    AppStatusBadge(
-                                      label: device.totalOutputW == null
-                                          ? 'Output n/a'
-                                          : 'Output ${device.totalOutputW!.abs().toStringAsFixed(0)}W',
-                                      tone:
-                                          device.totalOutputW == null ? AppStatusTone.neutral : AppStatusTone.active,
-                                    ),
-                                    _typedPowerBadge(
-                                      label: 'Solar in',
-                                      watts: _metricAsDouble(device, 'inputByType.solarW'),
-                                    ),
-                                    _typedPowerBadge(
-                                      label: 'AC in',
-                                      watts: _metricAsDouble(device, 'inputByType.acW'),
-                                    ),
-                                    _typedPowerBadge(
-                                      label: 'AC out',
-                                      watts: _metricAsDouble(device, 'outputByType.acW'),
-                                    ),
-                                    _typedPowerBadge(
-                                      label: 'DC out',
-                                      watts: _metricAsDouble(device, 'outputByType.dcW'),
-                                    ),
-                                    AppStatusBadge(
-                                      label: _metricAsDouble(device, 'battery.maxCellTempC') == null
-                                          ? 'Max cell temp n/a'
-                                          : 'Max cell temp ${_metricAsDouble(device, 'battery.maxCellTempC')!.toStringAsFixed(1)}°C',
-                                      tone: _metricAsDouble(device, 'battery.maxCellTempC') == null
-                                          ? AppStatusTone.neutral
-                                          : (_metricAsDouble(device, 'battery.maxCellTempC')! >= 45
-                                              ? AppStatusTone.warning
-                                              : AppStatusTone.active),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                child: DeviceSelectionCard(
+                  device: device,
+                  selected: selected,
+                  onTap: () => _openDeviceDetail(device),
                 ),
               );
             }),
