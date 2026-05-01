@@ -48,12 +48,19 @@ class AppGaugeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final theme = Theme.of(context);
     final resolvedAccent = accentColor ?? colors.primaryContainer;
     final safeMax = maxValue <= 0 ? 1 : maxValue;
     final inputProgress = (value / safeMax).clamp(0.0, 1.0);
     final outputProgress = ((outputValue ?? 0) / safeMax).clamp(0.0, 1.0);
     final hasBalanceData = outputValue != null;
     final isSurplus = hasBalanceData && value > (outputValue ?? 0);
+    final balanceDelta = hasBalanceData ? (value - (outputValue ?? 0)) : 0.0;
+    final balanceAbs = balanceDelta.abs();
+    final balanceDenominator = hasBalanceData
+        ? math.max(math.max(value, outputValue ?? 0), 1.0)
+        : safeMax;
+    final balanceProgress = (balanceAbs / balanceDenominator).clamp(0.0, 1.0);
     final areaColor = isSurplus
         ? colors.secondary.withValues(alpha: 0.20)
         : colors.error.withValues(alpha: 0.18);
@@ -69,10 +76,14 @@ class AppGaugeCard extends StatelessWidget {
                     ? const AppStatusBadge(
                         label: 'Surplus',
                         tone: AppStatusTone.active,
+                        animation: AppStatusBadgeAnimation.surplus,
+                        scale: 1.25,
                       )
                     : const AppStatusBadge(
                         label: 'Deficit',
                         tone: AppStatusTone.warning,
+                        animation: AppStatusBadgeAnimation.deficit,
+                        scale: 1.25,
                       )));
 
     return AppCard(
@@ -95,64 +106,100 @@ class AppGaugeCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(
-                          child: Text(
-                            title,
-                            style: Theme.of(context).textTheme.titleLarge,
+                        Expanded(child: Center(child: Text(
+                          title.toUpperCase(),
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.6,
                           ),
-                        ),
-                        statusBadge ?? const SizedBox.shrink(),
+                        ))),
                       ],
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: AppSpacing.xs),
-                      Text(
+                      Center(child: Text(
                         subtitle!,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: colors.onSurfaceVariant,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: colors.onSurfaceVariant.withValues(alpha: 0.85),
                         ),
                       ),
-                    ],
+                    )],
                     const SizedBox(height: AppSpacing.md),
                     Center(
                       child: SizedBox(
-                        width: 280,
-                        height: 178,
+                        width: 172,
+                        height: 32,
                         child: CustomPaint(
-                          painter: _EnergyBalanceGaugePainter(
-                            inputProgress: animatedInputProgress,
-                            outputProgress: animatedOutputProgress,
-                            trackColor: colors.gaugeTrack,
-                            inputColor: colors.primary,
-                            outputColor: colors.outline,
-                            fillColor: areaColor,
-                            tickColor: colors.onSurfaceVariant.withValues(
-                              alpha: 0.7,
-                            ),
+                          painter: _EnergyBalanceTopArcPainter(
+                            progress: balanceProgress,
+                            color: isSurplus
+                                ? colors.secondary.withValues(alpha: 0.55)
+                                : colors.error.withValues(alpha: 0.50),
+                            trackColor: colors.gaugeTrack.withValues(alpha: 0.72),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: AppSpacing.md),
-                    Wrap(
-                      spacing: AppSpacing.sm,
-                      runSpacing: AppSpacing.sm,
-                      children: [
-                        AppStatusBadge(
-                          label:
-                              'Entrada ${animatedInputValue.toStringAsFixed(0)}W',
-                          tone: AppStatusTone.active,
+                    const SizedBox(height: 8),
+                    Center(
+                      child: Text(
+                        hasBalanceData
+                            ? '${balanceAbs.toStringAsFixed(0)}$unit'
+                            : 'N/D',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: colors.onSurfaceVariant,
+                          fontWeight: FontWeight.w700,
                         ),
-                        AppStatusBadge(
-                          label: outputValue == null
-                              ? 'Salida N/D'
-                              : 'Salida ${animatedOutputValue.toStringAsFixed(0)}W',
-                          tone: outputValue == null
-                              ? AppStatusTone.neutral
-                              : AppStatusTone.warning,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Center(
+                      child: SizedBox(
+                        width: 280,
+                        height: 156,
+                        child: CustomPaint(
+                          painter: _EnergyBalanceGaugePainter(
+                            inputProgress: animatedInputProgress,
+                            outputProgress: animatedOutputProgress,
+                            trackColor: colors.gaugeTrack.withValues(alpha: 0.85),
+                            inputColor: colors.primary,
+                            outputColor: colors.onSurfaceVariant.withValues(alpha: 0.7),
+                            fillColor: areaColor,
+                            inputFillColor: colors.primary.withValues(alpha: 0.16),
+                            outputFillColor: colors.onSurfaceVariant.withValues(
+                              alpha: 0.14,
+                            ),
+                            tickColor: colors.onSurfaceVariant.withValues(alpha: 0.42),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _MetricReadout(
+                            label: 'Solar Input',
+                            value: animatedInputValue,
+                            unit: unit,
+                            color: colors.primary,
+                          ),
+                        ),
+                        Expanded(
+                          child: _MetricReadout(
+                            label: 'Consumption',
+                            value: outputValue == null ? null : animatedOutputValue,
+                            unit: unit,
+                            color: colors.onSurfaceVariant.withValues(alpha: 0.9),
+                            alignEnd: true,
+                          ),
                         ),
                       ],
                     ),
+                    if (statusBadge != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Center(child: statusBadge),
+                    ],
                   ],
                 );
               }
@@ -229,6 +276,124 @@ class AppGaugeCard extends StatelessWidget {
   }
 }
 
+class _MetricReadout extends StatelessWidget {
+  const _MetricReadout({
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.color,
+    this.alignEnd = false,
+  });
+
+  final String label;
+  final double? value;
+  final String unit;
+  final Color color;
+  final bool alignEnd;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: alignEnd
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: textTheme.labelSmall?.copyWith(
+            color: colors.onSurfaceVariant,
+            letterSpacing: 0.7,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              value == null ? 'N/D' : value!.toStringAsFixed(0),
+              style: textTheme.headlineMedium?.copyWith(
+                color: color,
+                fontWeight: FontWeight.w800,
+                height: 1,
+              ),
+            ),
+            if (value != null) ...[
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  unit.toLowerCase(),
+                  style: textTheme.titleMedium?.copyWith(
+                    color: color.withValues(alpha: 0.85),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _EnergyBalanceTopArcPainter extends CustomPainter {
+  const _EnergyBalanceTopArcPainter({
+    required this.progress,
+    required this.color,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final Color color;
+  final Color trackColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height * 1.08);
+    final stroke = 12.0;
+    const start = math.pi * 1.14;
+    const sweep = math.pi * 0.72;
+    final rect = Rect.fromCenter(
+      center: center,
+      width: size.width * 0.86,
+      height: size.height * 0.86,
+    );
+    canvas.drawArc(
+      rect,
+      start,
+      sweep,
+      false,
+      Paint()
+        ..color = trackColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawArc(
+      rect,
+      start,
+      sweep * progress.clamp(0.0, 1.0),
+      false,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = stroke
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _EnergyBalanceTopArcPainter oldDelegate) {
+    return progress != oldDelegate.progress ||
+        color != oldDelegate.color ||
+        trackColor != oldDelegate.trackColor;
+  }
+}
+
 class _GaugePainter extends CustomPainter {
   const _GaugePainter({
     required this.progress,
@@ -286,6 +451,8 @@ class _EnergyBalanceGaugePainter extends CustomPainter {
     required this.inputColor,
     required this.outputColor,
     required this.fillColor,
+    required this.inputFillColor,
+    required this.outputFillColor,
     required this.tickColor,
   });
 
@@ -295,20 +462,22 @@ class _EnergyBalanceGaugePainter extends CustomPainter {
   final Color inputColor;
   final Color outputColor;
   final Color fillColor;
+  final Color inputFillColor;
+  final Color outputFillColor;
   final Color tickColor;
 
-  static const double _startAngle = math.pi * 0.75;
-  static const double _sweepAngle = math.pi * 1.5;
+  static const double _startAngle = math.pi;
+  static const double _sweepAngle = math.pi;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.92);
-    final radius = math.min(size.width * 0.40, size.height * 0.80);
+    final center = Offset(size.width / 2, size.height * 0.94);
+    final radius = math.min(size.width * 0.38, size.height * 0.78);
 
     final trackPaint = Paint()
       ..color = trackColor
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 12
+      ..strokeWidth = 16
       ..strokeCap = StrokeCap.round;
 
     canvas.drawArc(
@@ -323,41 +492,98 @@ class _EnergyBalanceGaugePainter extends CustomPainter {
         _startAngle + (_sweepAngle * inputProgress.clamp(0.0, 1.0));
     final outputAngle =
         _startAngle + (_sweepAngle * outputProgress.clamp(0.0, 1.0));
+
+    _drawBodyBands(canvas, center, radius, inputAngle, outputAngle);
+
     final inputTip = Offset(
-      center.dx + math.cos(inputAngle) * (radius - 12),
-      center.dy + math.sin(inputAngle) * (radius - 12),
+      center.dx + math.cos(inputAngle) * (radius - 11),
+      center.dy + math.sin(inputAngle) * (radius - 11),
     );
     final outputTip = Offset(
-      center.dx + math.cos(outputAngle) * (radius - 12),
-      center.dy + math.sin(outputAngle) * (radius - 12),
+      center.dx + math.cos(outputAngle) * (radius - 11),
+      center.dy + math.sin(outputAngle) * (radius - 11),
     );
 
-    final areaPath = Path()
-      ..moveTo(center.dx, center.dy)
-      ..lineTo(outputTip.dx, outputTip.dy)
-      ..lineTo(inputTip.dx, inputTip.dy)
-      ..close();
-    canvas.drawPath(areaPath, Paint()..color = fillColor);
-
     _drawTicks(canvas, center, radius);
-    _drawNeedle(canvas, center, outputTip, outputColor, 3, 6);
-    _drawNeedle(canvas, center, inputTip, inputColor, 4, 7);
+    _drawNeedle(canvas, center, outputTip, outputColor, 4, 7, 0.58);
+    _drawNeedle(canvas, center, inputTip, inputColor, 5, 7, 0.72);
+    canvas.drawCircle(
+      center,
+      4.5,
+      Paint()..color = Colors.white.withValues(alpha: 0.85),
+    );
+  }
+
+  void _drawBodyBands(
+    Canvas canvas,
+    Offset center,
+    double radius,
+    double inputAngle,
+    double outputAngle,
+  ) {
+    final bodyOuter = radius - 18;
+    final bodyInner = radius - 52;
+    final bodyStroke = bodyOuter - bodyInner;
+    final bodyRadius = (bodyOuter + bodyInner) / 2;
+    final baseRect = Rect.fromCircle(center: center, radius: bodyRadius);
+
+    final inputSweep = inputAngle - _startAngle;
+    final outputSweep = outputAngle - _startAngle;
+    canvas.drawArc(
+      baseRect,
+      _startAngle,
+      inputSweep,
+      false,
+      Paint()
+        ..color = inputFillColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = bodyStroke
+        ..strokeCap = StrokeCap.butt,
+    );
+    canvas.drawArc(
+      baseRect,
+      _startAngle,
+      outputSweep,
+      false,
+      Paint()
+        ..color = outputFillColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = bodyStroke
+        ..strokeCap = StrokeCap.butt,
+    );
+
+    final diffStart = math.min(inputAngle, outputAngle);
+    final diffSweep = (inputAngle - outputAngle).abs();
+    if (diffSweep > 0.001) {
+      canvas.drawArc(
+        baseRect,
+        diffStart,
+        diffSweep,
+        false,
+        Paint()
+          ..color = fillColor
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = bodyStroke
+          ..strokeCap = StrokeCap.butt,
+      );
+    }
   }
 
   void _drawTicks(Canvas canvas, Offset center, double radius) {
     final paint = Paint()
       ..color = tickColor
       ..strokeWidth = 1.5;
-    for (int i = 0; i <= 4; i++) {
-      final t = i / 4;
+    for (int i = 0; i <= 2; i++) {
+      if (i == 1) continue;
+      final t = i / 2;
       final angle = _startAngle + (_sweepAngle * t);
       final outer = Offset(
-        center.dx + math.cos(angle) * (radius + 3),
-        center.dy + math.sin(angle) * (radius + 3),
+        center.dx + math.cos(angle) * (radius + 6),
+        center.dy + math.sin(angle) * (radius + 6),
       );
       final inner = Offset(
-        center.dx + math.cos(angle) * (radius - 9),
-        center.dy + math.sin(angle) * (radius - 9),
+        center.dx + math.cos(angle) * (radius - 3),
+        center.dy + math.sin(angle) * (radius - 3),
       );
       canvas.drawLine(inner, outer, paint);
     }
@@ -370,12 +596,14 @@ class _EnergyBalanceGaugePainter extends CustomPainter {
     Color color,
     double width,
     double hubRadius,
+    double lengthFactor,
   ) {
+    final tipAdjusted = Offset.lerp(center, tip, lengthFactor) ?? tip;
     final line = Paint()
       ..color = color
       ..strokeWidth = width
       ..strokeCap = StrokeCap.round;
-    canvas.drawLine(center, tip, line);
+    canvas.drawLine(center, tipAdjusted, line);
     canvas.drawCircle(center, hubRadius, Paint()..color = color);
   }
 
@@ -387,6 +615,8 @@ class _EnergyBalanceGaugePainter extends CustomPainter {
         inputColor != oldDelegate.inputColor ||
         outputColor != oldDelegate.outputColor ||
         fillColor != oldDelegate.fillColor ||
+        inputFillColor != oldDelegate.inputFillColor ||
+        outputFillColor != oldDelegate.outputFillColor ||
         tickColor != oldDelegate.tickColor;
   }
 }
