@@ -19,12 +19,16 @@ class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
     super.key,
     this.initialWsUrl,
+    this.initialThemeMode,
     this.allowReconnect = false,
+    this.onThemeModeChanged,
     this.onSaved,
   });
 
   final String? initialWsUrl;
+  final ThemeMode? initialThemeMode;
   final bool allowReconnect;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
   final ValueChanged<SettingsScreenResult>? onSaved;
 
   @override
@@ -37,6 +41,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _loading = true;
   bool _saving = false;
+  ThemeMode _themeMode = ThemeMode.system;
+  static const List<SegmentOption<ThemeMode>> _themeOptions = [
+    SegmentOption<ThemeMode>(value: ThemeMode.light, label: 'Light', icon: Icons.light_mode),
+    SegmentOption<ThemeMode>(value: ThemeMode.dark, label: 'Dark', icon: Icons.dark_mode),
+    SegmentOption<ThemeMode>(value: ThemeMode.system, label: 'System', icon: Icons.settings_suggest),
+  ];
 
   @override
   void initState() {
@@ -52,18 +62,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadStoredData() async {
     try {
-      final wsUrl = widget.initialWsUrl ?? await _settingsStorage.readWsUrl();
+      final wsUrlFuture = widget.initialWsUrl == null
+          ? _settingsStorage.readWsUrl()
+          : Future<String>.value(widget.initialWsUrl!);
+      final themeModeFuture = widget.initialThemeMode == null
+          ? _settingsStorage.readThemeMode()
+          : Future<ThemeMode>.value(widget.initialThemeMode!);
+      final results = await Future.wait<dynamic>([wsUrlFuture, themeModeFuture]);
       if (!mounted) {
         return;
       }
-      _wsUrlController.text = wsUrl;
+      _wsUrlController.text = results[0] as String;
+      _themeMode = results[1] as ThemeMode;
     } catch (_) {
       if (!mounted) {
         return;
       }
       _wsUrlController.text = 'ws://127.0.0.1:8787/ws';
+      _themeMode = ThemeMode.system;
       appGooeyToast.warning(
-        'We could not load your saved connection',
+        'We could not load your saved settings',
         config: const AppToastConfig(meta: 'SETTINGS'),
       );
     } finally {
@@ -71,6 +89,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _loading = false);
       }
     }
+  }
+
+  Future<void> _setThemeMode(ThemeMode mode) async {
+    if (_themeMode == mode) {
+      return;
+    }
+    setState(() => _themeMode = mode);
+    await _settingsStorage.writeThemeMode(mode);
+    widget.onThemeModeChanged?.call(mode);
   }
 
   String? _validateWsUrl() {
@@ -185,6 +212,31 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Text(
                   'You can keep this default URL if your bridge runs locally.',
                   style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppCard(
+                  surfaceLevel: 2,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Theme',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Choose between light, dark, or system theme mode.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      AppSegmentedControl<ThemeMode>(
+                        options: _themeOptions,
+                        value: _themeMode,
+                        onChanged: _setThemeMode,
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.md),
                 ExpansionTile(

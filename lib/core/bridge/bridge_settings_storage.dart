@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 class BridgeSettingsStorage {
@@ -5,6 +6,7 @@ class BridgeSettingsStorage {
     : _storage = storage ?? const FlutterSecureStorage();
 
   static const _wsUrlKey = 'bridge_ws_url';
+  static const _themeModeKey = 'app_theme_mode';
   static const _defaultWsUrl = 'ws://127.0.0.1:8787/ws';
 
   final FlutterSecureStorage _storage;
@@ -29,5 +31,23 @@ class BridgeSettingsStorage {
 
   Future<void> writeWsUrl(String wsUrl) {
     return _storage.write(key: _wsUrlKey, value: wsUrl.trim());
+  }
+
+  Future<ThemeMode> readThemeMode() async {
+    final raw = (await _storage.read(key: _themeModeKey))?.trim();
+    return switch (raw) {
+      'light' => ThemeMode.light,
+      'dark' => ThemeMode.dark,
+      _ => ThemeMode.system,
+    };
+  }
+
+  Future<void> writeThemeMode(ThemeMode mode) {
+    final value = switch (mode) {
+      ThemeMode.light => 'light',
+      ThemeMode.dark => 'dark',
+      ThemeMode.system => 'system',
+    };
+    return _storage.write(key: _themeModeKey, value: value);
   }
 }

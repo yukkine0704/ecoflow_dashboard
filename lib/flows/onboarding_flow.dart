@@ -234,9 +234,16 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
 }
 
 class DeviceSelectorScreen extends StatefulWidget {
-  const DeviceSelectorScreen({super.key, required this.wsUrl});
+  const DeviceSelectorScreen({
+    super.key,
+    required this.wsUrl,
+    this.themeMode,
+    this.onThemeModeChanged,
+  });
 
   final String wsUrl;
+  final ThemeMode? themeMode;
+  final ValueChanged<ThemeMode>? onThemeModeChanged;
 
   @override
   State<DeviceSelectorScreen> createState() => _DeviceSelectorScreenState();
@@ -356,7 +363,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
   Future<void> _openSettings() async {
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
-        builder: (_) => SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
+        builder: (_) => SettingsScreen(
+          initialWsUrl: _wsUrl,
+          initialThemeMode: widget.themeMode,
+          allowReconnect: true,
+          onThemeModeChanged: widget.onThemeModeChanged,
+        ),
       ),
     );
     if (!mounted || result == null || !result.saved) {

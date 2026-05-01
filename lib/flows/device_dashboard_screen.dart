@@ -99,7 +99,13 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
         builder: (_) =>
-            SettingsScreen(initialWsUrl: _wsUrl, allowReconnect: true),
+            SettingsScreen(
+              initialWsUrl: _wsUrl,
+              initialThemeMode: Theme.of(context).brightness == Brightness.dark
+                  ? ThemeMode.dark
+                  : ThemeMode.light,
+              allowReconnect: true,
+            ),
       ),
     );
     if (!mounted || result == null || !result.saved) {

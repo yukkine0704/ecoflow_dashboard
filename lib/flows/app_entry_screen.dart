@@ -5,7 +5,14 @@ import 'onboarding_flow.dart';
 import 'settings_screen.dart';
 
 class AppEntryScreen extends StatefulWidget {
-  const AppEntryScreen({super.key});
+  const AppEntryScreen({
+    super.key,
+    required this.themeMode,
+    required this.onThemeModeChanged,
+  });
+
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
   @override
   State<AppEntryScreen> createState() => _AppEntryScreenState();
@@ -40,10 +47,16 @@ class _AppEntryScreenState extends State<AppEntryScreen> {
     }
 
     if (_wsUrl != null && _wsUrl!.isNotEmpty) {
-      return DeviceSelectorScreen(wsUrl: _wsUrl!);
+      return DeviceSelectorScreen(
+        wsUrl: _wsUrl!,
+        themeMode: widget.themeMode,
+        onThemeModeChanged: widget.onThemeModeChanged,
+      );
     }
 
     return SettingsScreen(
+      initialThemeMode: widget.themeMode,
+      onThemeModeChanged: widget.onThemeModeChanged,
       onSaved: (result) {
         setState(() {
           _wsUrl = result.wsUrl;
