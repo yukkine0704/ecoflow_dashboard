@@ -6,10 +6,18 @@ import '../tokens/app_metrics.dart';
 enum AppStatusTone { neutral, active, warning, danger }
 
 class AppStatusBadge extends StatelessWidget {
-  const AppStatusBadge({super.key, required this.label, required this.tone});
+  const AppStatusBadge({
+    super.key,
+    required this.label,
+    required this.tone,
+    this.onTap,
+    this.highlighted = false,
+  });
 
   final String label;
   final AppStatusTone tone;
+  final VoidCallback? onTap;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +40,8 @@ class AppStatusBadge extends StatelessWidget {
         fg: colors.error,
       ),
     };
-    return Container(
+    final badge = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.md,
         vertical: AppSpacing.sm,
@@ -40,6 +49,16 @@ class AppStatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: palette.bg,
         borderRadius: AppRadius.full,
+        border: highlighted ? Border.all(color: palette.fg, width: 1.3) : null,
+        boxShadow: highlighted
+            ? [
+                BoxShadow(
+                  color: palette.fg.withValues(alpha: 0.25),
+                  blurRadius: 10,
+                  spreadRadius: 0.6,
+                ),
+              ]
+            : null,
       ),
       child: Text(
         label,
@@ -48,6 +67,14 @@ class AppStatusBadge extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
       ),
+    );
+    if (onTap == null) {
+      return badge;
+    }
+    return InkWell(
+      borderRadius: AppRadius.full,
+      onTap: onTap,
+      child: badge,
     );
   }
 }

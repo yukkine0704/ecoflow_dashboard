@@ -38,3 +38,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/Delta-3.png
+    - assets/River-3.png

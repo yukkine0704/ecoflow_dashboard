@@ -14,6 +14,10 @@ class DeviceSelectionCard extends StatelessWidget {
   final BridgeDeviceSnapshot device;
   final bool selected;
   final VoidCallback onTap;
+  static const Map<String, String> _deviceImageAssetsById = <String, String>{
+    'P351ZAHAPH2R2706': 'assets/Delta-3.png',
+    'R651ZAB5XH111262': 'assets/River-3.png',
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -28,6 +32,7 @@ class DeviceSelectionCard extends StatelessWidget {
         ? AppStatusTone.neutral
         : (online ? AppStatusTone.active : AppStatusTone.warning);
     final estimateLabel = _estimateLabel(device, battery);
+    final localAssetImagePath = _deviceImageAssetsById[device.deviceId];
 
     Widget imageBlock() {
       return ClipRRect(
@@ -35,7 +40,12 @@ class DeviceSelectionCard extends StatelessWidget {
         child: SizedBox(
           width: isMobile ? double.infinity : 136,
           height: isMobile ? 180 : 136,
-          child: device.imageUrl == null
+          child: localAssetImagePath != null
+              ? Image.asset(
+                  localAssetImagePath,
+                  fit: isMobile ? BoxFit.cover : BoxFit.contain,
+                )
+              : (device.imageUrl == null
               ? Container(
                   color: colors.primaryContainer.withValues(alpha: 0.32),
                   child: const Icon(Icons.battery_charging_full_rounded),
@@ -47,7 +57,7 @@ class DeviceSelectionCard extends StatelessWidget {
                     color: colors.primaryContainer.withValues(alpha: 0.32),
                     child: const Icon(Icons.battery_charging_full_rounded),
                   ),
-                ),
+                )),
         ),
       );
     }

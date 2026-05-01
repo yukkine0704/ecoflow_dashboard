@@ -16,6 +16,21 @@ class BridgeRepository {
   BridgeRepository({BridgeWsClient? client})
     : _client = client ?? BridgeWsClient();
 
+  static const Map<String, ({String displayName, String model})>
+  _directModeDeviceAliases = <String, ({String displayName, String model})>{
+    'P351ZAHAPH2R2706': (
+      displayName: 'Delta 3 Pro',
+      model: 'Delta 3',
+    ),
+    'R651ZAB5XH111262': (
+      displayName: 'River 3',
+      model: 'River',
+    ),
+  };
+  static const Set<String> _preferSocBatteryDeviceIds = <String>{
+    'R651ZAB5XH111262',
+  };
+
   final BridgeWsClient _client;
   final Map<String, BridgeDeviceSnapshot> _devices =
       <String, BridgeDeviceSnapshot>{};
@@ -131,13 +146,14 @@ class BridgeRepository {
       if (catalogItem.deviceId.trim().isEmpty) {
         continue;
       }
-      _catalogById[catalogItem.deviceId] = catalogItem;
+      final aliasedCatalogItem = _applyCatalogAlias(catalogItem);
+      _catalogById[aliasedCatalogItem.deviceId] = aliasedCatalogItem;
       final current = _devices[catalogItem.deviceId];
       if (current != null) {
         _devices[catalogItem.deviceId] = current.copyWith(
-          displayName: catalogItem.displayName,
-          model: catalogItem.model,
-          imageUrl: catalogItem.imageUrl,
+          displayName: aliasedCatalogItem.displayName,
+          model: aliasedCatalogItem.model,
+          imageUrl: aliasedCatalogItem.imageUrl,
         );
       }
     }
@@ -159,15 +175,23 @@ class BridgeRepository {
         (key, value) => MapEntry(key.toString(), value),
       );
       final fleetItem = BridgeFleetItem.fromJson(normalized);
+      final alias = _directModeDeviceAliases[fleetItem.deviceId];
+      final nextDisplayName = alias?.displayName ?? fleetItem.displayName;
+      final nextModel = alias?.model ?? fleetItem.model;
+      final nextBattery = _resolveBatteryPercent(
+        deviceId: fleetItem.deviceId,
+        rawBatteryPercent: fleetItem.batteryPercent,
+        metrics: _devices[fleetItem.deviceId]?.metrics,
+      );
       final current = _devices[fleetItem.deviceId];
       if (current == null) {
         _devices[fleetItem.deviceId] = BridgeDeviceSnapshot(
           deviceId: fleetItem.deviceId,
-          displayName: fleetItem.displayName,
-          model: fleetItem.model,
+          displayName: nextDisplayName,
+          model: nextModel,
           imageUrl: null,
           online: fleetItem.online,
-          batteryPercent: fleetItem.batteryPercent,
+          batteryPercent: nextBattery,
           temperatureC: null,
           totalInputW: null,
           totalOutputW: null,
@@ -176,10 +200,10 @@ class BridgeRepository {
         );
       } else {
         _devices[fleetItem.deviceId] = current.copyWith(
-          displayName: fleetItem.displayName,
-          model: fleetItem.model,
+          displayName: nextDisplayName,
+          model: nextModel,
           online: fleetItem.online,
-          batteryPercent: fleetItem.batteryPercent,
+          batteryPercent: nextBattery,
           updatedAt: fleetItem.updatedAt,
         );
       }
@@ -196,7 +220,16 @@ class BridgeRepository {
     final normalized = snapshotRaw.map(
       (key, value) => MapEntry(key.toString(), value),
     );
-    final snapshot = BridgeDeviceSnapshot.fromJson(normalized);
+    final parsedSnapshot = BridgeDeviceSnapshot.fromJson(normalized);
+    final snapshot = _applySnapshotAlias(
+      parsedSnapshot.copyWith(
+        batteryPercent: _resolveBatteryPercent(
+          deviceId: parsedSnapshot.deviceId,
+          rawBatteryPercent: parsedSnapshot.batteryPercent,
+          metrics: parsedSnapshot.metrics,
+        ),
+      ),
+    );
     _devices[snapshot.deviceId] = snapshot;
     _deviceController.add(snapshot);
     _fleetController.add(_sortedFleet());
@@ -250,6 +283,12 @@ class BridgeRepository {
         }
       }
 
+      battery = _resolveBatteryPercent(
+        deviceId: deviceId,
+        rawBatteryPercent: battery,
+        metrics: nextMetrics,
+      );
+
       final updatedAt =
           DateTime.tryParse((payload['updatedAt'] ?? '').toString()) ??
           DateTime.now();
@@ -285,5 +324,63 @@ class BridgeRepository {
     await _errorsSub?.cancel();
     _messagesSub = null;
     _errorsSub = null;
+  }
+
+  BridgeDeviceSnapshot _applySnapshotAlias(BridgeDeviceSnapshot snapshot) {
+    final alias = _directModeDeviceAliases[snapshot.deviceId];
+    if (alias == null) {
+      return snapshot;
+    }
+    return snapshot.copyWith(displayName: alias.displayName, model: alias.model);
+  }
+
+  BridgeCatalogItem _applyCatalogAlias(BridgeCatalogItem item) {
+    final alias = _directModeDeviceAliases[item.deviceId];
+    if (alias == null) {
+      return item;
+    }
+    return BridgeCatalogItem(
+      deviceId: item.deviceId,
+      displayName: alias.displayName,
+      model: alias.model,
+      imageUrl: item.imageUrl,
+    );
+  }
+
+  int? _resolveBatteryPercent({
+    required String deviceId,
+    required int? rawBatteryPercent,
+    required Map<String, dynamic>? metrics,
+  }) {
+    final soc = _extractSocFromMetrics(metrics);
+    if (_preferSocBatteryDeviceIds.contains(deviceId) && soc != null) {
+      return soc;
+    }
+    return rawBatteryPercent ?? soc;
+  }
+
+  int? _extractSocFromMetrics(Map<String, dynamic>? metrics) {
+    if (metrics == null || metrics.isEmpty) {
+      return null;
+    }
+    const socKeys = <String>['pd.soc', 'bms.soc', 'pd.bmsBattSoc', 'pd.cmsBattSoc'];
+    for (final key in socKeys) {
+      final raw = metrics[key];
+      final parsed = _asRoundedInt(raw);
+      if (parsed != null) {
+        return parsed.clamp(0, 100);
+      }
+    }
+    return null;
+  }
+
+  int? _asRoundedInt(Object? value) {
+    if (value is num) {
+      return value.round();
+    }
+    if (value is String) {
+      return int.tryParse(value) ?? double.tryParse(value)?.round();
+    }
+    return null;
   }
 }

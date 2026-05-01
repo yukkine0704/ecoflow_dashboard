@@ -24,6 +24,11 @@ class DeviceDetailScreen extends StatefulWidget {
 }
 
 class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
+  static const Map<String, String> _deviceImageAssetsById = <String, String>{
+    'P351ZAHAPH2R2706': 'assets/Delta-3.png',
+    'R651ZAB5XH111262': 'assets/River-3.png',
+  };
+
   late BridgeDeviceSnapshot _snapshot;
   StreamSubscription<BridgeDeviceSnapshot>? _deviceSub;
 
@@ -43,13 +48,6 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   void dispose() {
     unawaited(_deviceSub?.cancel());
     super.dispose();
-  }
-
-  String _formatTimestamp(DateTime value) {
-    final hh = value.hour.toString().padLeft(2, '0');
-    final mm = value.minute.toString().padLeft(2, '0');
-    final ss = value.second.toString().padLeft(2, '0');
-    return '${value.year}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')} $hh:$mm:$ss';
   }
 
   String _prettyMetrics(Map<String, dynamic> metrics) {
@@ -112,6 +110,52 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return null;
   }
 
+  double? _metricAsTemperatureC(String key) {
+    final value = _metricAsDouble(key);
+    if (value == null) {
+      return null;
+    }
+    if (value < -50 || value > 120) {
+      return null;
+    }
+    return value;
+  }
+
+  double? _firstTemperatureValue(List<String> keys) {
+    for (final key in keys) {
+      final value = _metricAsTemperatureC(key);
+      if (value != null) {
+        return value;
+      }
+    }
+    return null;
+  }
+
+  ({double? bmsTempC, double? maxCellTempC, double? deltaC, bool mismatch})
+  _bmsTemperatureInfo() {
+    final bmsTempC = _firstTemperatureValue(const ['bms.temp', 'pd.temp']);
+    final maxCellTempC = _firstTemperatureValue(const [
+      'battery.maxCellTempC',
+      'bms.maxCellTemp',
+      'pd.bmsMaxCellTemp',
+    ]);
+    if (bmsTempC == null || maxCellTempC == null) {
+      return (
+        bmsTempC: bmsTempC,
+        maxCellTempC: maxCellTempC,
+        deltaC: null,
+        mismatch: false,
+      );
+    }
+    final deltaC = (bmsTempC - maxCellTempC).abs();
+    return (
+      bmsTempC: bmsTempC,
+      maxCellTempC: maxCellTempC,
+      deltaC: deltaC,
+      mismatch: deltaC > 5,
+    );
+  }
+
   AppStatusBadge _powerBadge(String label, double? watts) {
     return AppStatusBadge(
       label: watts == null
@@ -121,42 +165,169 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     );
   }
 
+  String _estimateLabel() {
+    final battery = _snapshot.batteryPercent;
+    if (_snapshot.online == false) {
+      return 'Disconnected';
+    }
+    if (battery == null) {
+      return 'Est. n/a';
+    }
+    if (battery < 30) {
+      return battery < 15 ? 'May run out soon!' : 'Needs to charge soon';
+    }
+    final outputW = _snapshot.totalOutputW?.abs();
+    if (outputW == null || outputW <= 0) {
+      return 'Ready to charge';
+    }
+    final estimatedHours = (battery / 100) * 12;
+    return 'Est. ${estimatedHours.toStringAsFixed(0)}h remaining';
+  }
+
+  Widget _buildDeviceHeroCard(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final isMobile = MediaQuery.sizeOf(context).width < 700;
+    final battery = _snapshot.batteryPercent;
+    final batteryValue = battery == null ? 0.0 : battery.clamp(0, 100) / 100.0;
+    final localAssetImagePath = _deviceImageAssetsById[_snapshot.deviceId];
+
+    Widget imageBlock() {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(28),
+        child: SizedBox(
+          width: isMobile ? double.infinity : 180,
+          height: isMobile ? 220 : 180,
+          child: localAssetImagePath != null
+              ? Image.asset(
+                  localAssetImagePath,
+                  fit: isMobile ? BoxFit.cover : BoxFit.contain,
+                )
+              : (_snapshot.imageUrl == null
+              ? Container(
+                  color: colors.primaryContainer.withValues(alpha: 0.32),
+                  child: const Icon(Icons.battery_charging_full_rounded, size: 56),
+                )
+              : Image.network(
+                  _snapshot.imageUrl!,
+                  fit: isMobile ? BoxFit.cover : BoxFit.contain,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    color: colors.primaryContainer.withValues(alpha: 0.32),
+                    child: const Icon(Icons.battery_charging_full_rounded, size: 56),
+                  ),
+                )),
+        ),
+      );
+    }
+
+    Widget detailsBlock() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _snapshot.displayName,
+                    style: textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      height: 1.0,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(
+                    _snapshot.model ?? 'Model unavailable',
+                    style: textTheme.titleLarge?.copyWith(
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Text(
+                'Battery Level',
+                style: textTheme.titleLarge?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Text(
+                battery == null ? 'n/a' : '$battery%',
+                style: textTheme.displaySmall?.copyWith(
+                  color: colors.primary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: SizedBox(
+              height: 20,
+              child: LinearProgressIndicator(
+                value: battery == null ? null : batteryValue,
+                minHeight: 20,
+                backgroundColor: colors.surfaceContainerHigh,
+                valueColor: AlwaysStoppedAnimation<Color>(colors.primary),
+              ),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Row(
+            children: [
+              Text('0%', style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+              const Spacer(),
+              Text(
+                _estimateLabel(),
+                style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+              ),
+              const Spacer(),
+              Text('100%', style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+            ],
+          ),
+        ],
+      );
+    }
+
+    return AppCard(
+      surfaceLevel: 1,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isMobile) ...[
+            imageBlock(),
+            const SizedBox(height: 16),
+            detailsBlock(),
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                imageBlock(),
+                const SizedBox(width: 20),
+                Expanded(child: detailsBlock()),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final bmsTempInfo = _bmsTemperatureInfo();
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle del Dispositivo')),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
         children: [
-          AppCard(
-            surfaceLevel: 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _snapshot.displayName,
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text('ID: ${_snapshot.deviceId}'),
-                const SizedBox(height: AppSpacing.sm),
-                Text('Modelo: ${_snapshot.model ?? 'N/D'}'),
-                const SizedBox(height: AppSpacing.sm),
-                AppStatusBadge(
-                  label: _snapshot.online == null
-                      ? 'Estado N/D'
-                      : (_snapshot.online! ? 'Online' : 'Offline'),
-                  tone: _snapshot.online == null
-                      ? AppStatusTone.neutral
-                      : (_snapshot.online!
-                            ? AppStatusTone.active
-                            : AppStatusTone.warning),
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text('Actualizado: ${_formatTimestamp(_snapshot.updatedAt)}'),
-              ],
-            ),
-          ),
+          _buildDeviceHeroCard(context),
           const SizedBox(height: AppSpacing.md),
           AppGaugeCard.energyBalance(
             inputW: _snapshot.totalInputW,
@@ -197,6 +368,31 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                           : (_snapshot.temperatureC! >= 45
                                 ? AppStatusTone.warning
                                 : AppStatusTone.active),
+                    ),
+                    AppStatusBadge(
+                      label: bmsTempInfo.bmsTempC == null
+                          ? 'Temp BMS N/D'
+                          : 'Temp BMS ${bmsTempInfo.bmsTempC!.toStringAsFixed(1)}°C',
+                      tone: bmsTempInfo.bmsTempC == null
+                          ? AppStatusTone.neutral
+                          : (bmsTempInfo.mismatch
+                                ? AppStatusTone.danger
+                                : (bmsTempInfo.bmsTempC! >= 45
+                                      ? AppStatusTone.warning
+                                      : AppStatusTone.active)),
+                      highlighted: bmsTempInfo.mismatch,
+                      onTap: bmsTempInfo.mismatch
+                          ? () {
+                              appGooeyToast.warning(
+                                'Revisa la temperatura del BMS',
+                                config: AppToastConfig(
+                                  meta: 'BMS TEMP ALERT',
+                                  description:
+                                      'Temp BMS ${bmsTempInfo.bmsTempC!.toStringAsFixed(1)}°C vs celda máx ${bmsTempInfo.maxCellTempC!.toStringAsFixed(1)}°C (Δ ${bmsTempInfo.deltaC!.toStringAsFixed(1)}°C).',
+                                ),
+                              );
+                            }
+                          : null,
                     ),
                     AppStatusBadge(
                       label: _metricAsDouble('battery.maxCellTempC') == null
