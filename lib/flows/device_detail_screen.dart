@@ -529,6 +529,154 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     };
   }
 
+  bool _isDelta3Device() {
+    if (_snapshot.deviceId == 'P351ZAHAPH2R2706') {
+      return true;
+    }
+    final model = _snapshot.model?.toLowerCase();
+    return model?.contains('delta 3') ?? false;
+  }
+
+  AppStatusTone _temperatureTone(double? value) {
+    if (value == null) {
+      return AppStatusTone.neutral;
+    }
+    if (value >= 48) {
+      return AppStatusTone.danger;
+    }
+    if (value >= 40) {
+      return AppStatusTone.warning;
+    }
+    return AppStatusTone.active;
+  }
+
+  _ExtraBatteryVm _extraBatteryVm(int index) {
+    final suffix = '$index';
+    return _ExtraBatteryVm(
+      index: index,
+      portWatts: _metricAsDouble('pd.powGet4p8$suffix'),
+      soc: _metricAsDouble('pd.extraBattery$suffix.soc'),
+      tempC: _metricAsDouble('pd.extraBattery$suffix.temp'),
+      maxCellTempC: _metricAsDouble('pd.extraBattery$suffix.maxCellTemp'),
+      minCellTempC: _metricAsDouble('pd.extraBattery$suffix.minCellTemp'),
+      inputWatts: _metricAsDouble('pd.extraBattery$suffix.inputWatts'),
+      outputWatts: _metricAsDouble('pd.extraBattery$suffix.outputWatts'),
+      cycles: _metricAsDouble('pd.extraBattery$suffix.cycles'),
+    );
+  }
+
+  bool _hasExtraBatteryData() {
+    if (!_isDelta3Device()) {
+      return false;
+    }
+    return _extraBatteryVm(1).hasAnyData || _extraBatteryVm(2).hasAnyData;
+  }
+
+  Widget _buildExtraBatteriesCard(BuildContext context) {
+    if (!_isDelta3Device()) {
+      return const SizedBox.shrink();
+    }
+
+    final eb1 = _extraBatteryVm(1);
+    final eb2 = _extraBatteryVm(2);
+    final batteries = [eb1, eb2].where((vm) => vm.hasAnyData).toList();
+    if (batteries.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    Widget batteryCard(_ExtraBatteryVm vm) {
+      return AppCard(
+        surfaceLevel: 2,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'EB${vm.index}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                if (vm.soc != null)
+                  AppStatusBadge(
+                    label: 'SOC ${vm.soc!.toStringAsFixed(0)}%',
+                    tone: AppStatusTone.active,
+                  ),
+                if (vm.portWatts != null)
+                  AppStatusBadge(
+                    label: 'Port ${vm.portWatts!.toStringAsFixed(0)}W',
+                    tone: AppStatusTone.active,
+                  ),
+                if (vm.inputWatts != null)
+                  AppStatusBadge(
+                    label: 'In ${vm.inputWatts!.toStringAsFixed(0)}W',
+                    tone: AppStatusTone.active,
+                  ),
+                if (vm.outputWatts != null)
+                  AppStatusBadge(
+                    label: 'Out ${vm.outputWatts!.toStringAsFixed(0)}W',
+                    tone: AppStatusTone.active,
+                  ),
+                if (vm.tempC != null)
+                  AppStatusBadge(
+                    label: 'Temp ${vm.tempC!.toStringAsFixed(1)}°C',
+                    tone: _temperatureTone(vm.tempC),
+                  ),
+                if (vm.maxCellTempC != null)
+                  AppStatusBadge(
+                    label: 'Cell Max ${vm.maxCellTempC!.toStringAsFixed(1)}°C',
+                    tone: _temperatureTone(vm.maxCellTempC),
+                  ),
+                if (vm.minCellTempC != null)
+                  AppStatusBadge(
+                    label: 'Cell Min ${vm.minCellTempC!.toStringAsFixed(1)}°C',
+                    tone: _temperatureTone(vm.minCellTempC),
+                  ),
+                if (vm.cycles != null)
+                  AppStatusBadge(
+                    label: 'Cycles ${vm.cycles!.toStringAsFixed(0)}',
+                    tone: AppStatusTone.neutral,
+                  ),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
+
+    return AppCard(
+      surfaceLevel: 1,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Extra Batteries',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Telemetría dedicada de baterías auxiliares para Delta 3.',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.md),
+          ...batteries.map(
+            (vm) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: batteryCard(vm),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<_OutputChannelVm> _outputChannels() {
     const channelCandidates = <String, List<String>>{
       'AC Output': ['powgetacout', 'powgetac', 'acoutputwatts', 'outpower'],
@@ -1198,6 +1346,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             outputW: _snapshot.totalOutputW,
             maxW: 2200,
           ),
+          if (_hasExtraBatteryData()) ...[
+            const SizedBox(height: AppSpacing.md),
+            _buildExtraBatteriesCard(context),
+          ],
           const SizedBox(height: AppSpacing.md),
           _buildOutputChannelsCard(context),
           const SizedBox(height: AppSpacing.md),
@@ -1294,18 +1446,6 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                           ? AppStatusTone.neutral
                           : AppStatusTone.active,
                     ),
-                    if (_metricAsDouble('pd.powGet4p81') != null)
-                      AppStatusBadge(
-                        label:
-                            'Extra battery 1 ${_metricAsDouble('pd.powGet4p81')!.toStringAsFixed(0)}W',
-                        tone: AppStatusTone.active,
-                      ),
-                    if (_metricAsDouble('pd.powGet4p82') != null)
-                      AppStatusBadge(
-                        label:
-                            'Extra battery 2 ${_metricAsDouble('pd.powGet4p82')!.toStringAsFixed(0)}W',
-                        tone: AppStatusTone.active,
-                      ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -1442,6 +1582,40 @@ class _OutputChannelVm {
   final String? metricKey;
   final String category;
   final bool isDerivedFallback;
+}
+
+class _ExtraBatteryVm {
+  const _ExtraBatteryVm({
+    required this.index,
+    required this.portWatts,
+    required this.soc,
+    required this.tempC,
+    required this.maxCellTempC,
+    required this.minCellTempC,
+    required this.inputWatts,
+    required this.outputWatts,
+    required this.cycles,
+  });
+
+  final int index;
+  final double? portWatts;
+  final double? soc;
+  final double? tempC;
+  final double? maxCellTempC;
+  final double? minCellTempC;
+  final double? inputWatts;
+  final double? outputWatts;
+  final double? cycles;
+
+  bool get hasAnyData =>
+      portWatts != null ||
+      soc != null ||
+      tempC != null ||
+      maxCellTempC != null ||
+      minCellTempC != null ||
+      inputWatts != null ||
+      outputWatts != null ||
+      cycles != null;
 }
 
 class _ThermalCellVm {

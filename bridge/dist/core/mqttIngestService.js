@@ -163,6 +163,19 @@ export class MqttIngestService {
             const changed = {};
             Object.assign(changed, connectivityDelta.changed);
             const flatParams = flattenParams(params);
+            const debugExtraKeys = Object.entries(flatParams).filter(([k]) => (k.startsWith('pd.extraBattery')
+                || k === 'usb1Watts'
+                || k === 'usb2Watts'
+                || k === 'typec1Watts'
+                || k === 'typec2Watts'
+                || k === 'powGetQcusb1'
+                || k === 'powGetQcusb2'
+                || k === 'powGetTypec1'
+                || k === 'powGetTypec2'));
+            if (debugExtraKeys.length > 0) {
+                const preview = Object.fromEntries(debugExtraKeys);
+                console.log(`[bridge][debug-extra][${sn}] ${JSON.stringify(preview)}`);
+            }
             for (const [rawKey, rawValue] of Object.entries(flatParams)) {
                 const key = rawKey.trim();
                 if (!key) {

@@ -70,6 +70,11 @@ export const MAPPING_RULES: MappingRule[] = [
   { channel: '*', state: 'powGetTypec2', field: 'totalOutputW' },
   { channel: '*', state: 'powGetQcusb1', field: 'totalOutputW' },
   { channel: '*', state: 'powGetQcusb2', field: 'totalOutputW' },
+  { channel: '*', state: 'usb1Watts', field: 'totalOutputW' },
+  { channel: '*', state: 'usb2Watts', field: 'totalOutputW' },
+  { channel: '*', state: 'typec1Watts', field: 'totalOutputW' },
+  { channel: '*', state: 'typec2Watts', field: 'totalOutputW' },
+  { channel: '*', state: 'powGet5p8', field: 'totalOutputW' },
   { channel: '*', state: 'powGet4p81', field: 'totalOutputW' },
   { channel: '*', state: 'powGet4p82', field: 'totalOutputW' },
 

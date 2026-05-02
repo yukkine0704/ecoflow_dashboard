@@ -156,7 +156,7 @@ export class DeviceStateStore {
         const key = metricKey.toLowerCase().replace(/[._-]/g, '');
         if (key.includes('powgetacout') || key.includes('powgetac') || key.includes('acoutput') || key.includes('acout'))
             return 'ac';
-        if (key.includes('12v') || key.includes('24v') || key.includes('typec') || key.includes('qcusb') || key.includes('dcp') || key.includes('dc'))
+        if (key.includes('12v') || key.includes('24v') || key.includes('typec') || key.includes('qcusb') || key.includes('usb') || key.includes('dcp') || key.includes('dc'))
             return 'dc';
         return 'other';
     }
@@ -168,7 +168,13 @@ export class DeviceStateStore {
             || key.includes('powget24v')
             || key.includes('powgettypec')
             || key.includes('powgetqcusb')
-            || key.includes('powgetdcp'));
+            || key.includes('powgetdcp')
+            || key.includes('usb1watts')
+            || key.includes('usb2watts')
+            || key.includes('typec1watts')
+            || key.includes('typec2watts')
+            || key.includes('powget5p8')
+            || key.includes('powget4p8'));
     }
     resolveActiveOutputComponents(components) {
         const sourceSpecific = Object.entries(components).filter(([metricKey]) => this.isSourceSpecificOutputMetric(metricKey));

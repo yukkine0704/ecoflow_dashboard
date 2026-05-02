@@ -20,7 +20,15 @@ function getNumber(out, keys) {
     return null;
 }
 function mapExtraBatteryMetrics(out) {
-    const rawNum = getNumber(out, ['num']);
+    const rawNum = getNumber(out, [
+        'num',
+        'battery_num',
+        'batterynum',
+        'bat_num',
+        'batnum',
+        'bp_num',
+        'bpnum',
+    ]);
     if (rawNum === null)
         return;
     const batteryIndex = Math.round(rawNum);
@@ -77,7 +85,11 @@ function routeByEnvelope(params, ctx) {
 export const deltaPro3Decoder = {
     supports(ctx) {
         const model = (ctx.model || '').toLowerCase();
-        return model.includes('delta pro 3') || model.includes('delta_pro_3') || model.includes('delta 3 pro');
+        return model.includes('delta pro 3')
+            || model.includes('delta_pro_3')
+            || model.includes('delta 3 pro')
+            || model.includes('delta 3')
+            || model.includes('delta3');
     },
     decode(params, ctx) {
         const normalized = normalizeKeys(params);

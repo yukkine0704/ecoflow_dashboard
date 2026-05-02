@@ -24,7 +24,15 @@ function getNumber(out: Record<string, unknown>, keys: string[]): number | null 
 }
 
 function mapExtraBatteryMetrics(out: Record<string, unknown>): void {
-  const rawNum = getNumber(out, ['num']);
+  const rawNum = getNumber(out, [
+    'num',
+    'battery_num',
+    'batterynum',
+    'bat_num',
+    'batnum',
+    'bp_num',
+    'bpnum',
+  ]);
   if (rawNum === null) return;
   const batteryIndex = Math.round(rawNum);
   if (!Number.isFinite(batteryIndex) || batteryIndex < 1 || batteryIndex > 8) return;
@@ -79,7 +87,11 @@ function routeByEnvelope(params: Record<string, unknown>, ctx: DecoderContext): 
 export const deltaPro3Decoder: ModelDecoder = {
   supports(ctx: DecoderContext): boolean {
     const model = (ctx.model || '').toLowerCase();
-    return model.includes('delta pro 3') || model.includes('delta_pro_3') || model.includes('delta 3 pro');
+    return model.includes('delta pro 3')
+      || model.includes('delta_pro_3')
+      || model.includes('delta 3 pro')
+      || model.includes('delta 3')
+      || model.includes('delta3');
   },
   decode(params: Record<string, unknown>, ctx: DecoderContext): ModelDecoderOutput {
     const normalized = normalizeKeys(params);

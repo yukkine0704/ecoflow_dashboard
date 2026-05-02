@@ -43,6 +43,20 @@ test('input/output by type aggregate without double counting when component metr
   assert.equal(snapshot.metrics['outputByType.dcW'], 150);
 });
 
+test('delta3 pro keeps usb/typec watts in dc output bucket', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'P351ZAHAPH2R2706';
+
+  store.upsertMetric(deviceId, 'pd', 'powGetAcOut', -458);
+  store.upsertMetric(deviceId, 'pd', 'usb1Watts', 6);
+  store.upsertMetric(deviceId, 'pd', 'typec1Watts', 4);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.metrics['outputByType.acW'], -458);
+  assert.equal(snapshot.metrics['outputByType.dcW'], 10);
+});
+
 test('delta3 fallback uses total input as solar when only powGetPv is present', () => {
   const store = new DeviceStateStore();
   const deviceId = 'P351ZAHAPH2R2706';

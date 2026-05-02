@@ -62,6 +62,22 @@ test('delta pro 3 decoder supports compact heartbeat keys for extra battery mapp
   assert.equal(params['pd.extraBattery1.outputWatts'], 0);
 });
 
+test('delta pro 3 decoder maps extra battery metrics when battery index uses battery_num', () => {
+  const params = decodeModelTelemetry({
+    battery_num: 1,
+    soc: 66,
+    temp: 29,
+    input_watts: 210,
+  }, {
+    model: 'Delta 3',
+    envelope: { cmdFunc: 32, cmdId: 50 },
+  });
+
+  assert.equal(params['pd.extraBattery1.soc'], 66);
+  assert.equal(params['pd.extraBattery1.temp'], 29);
+  assert.equal(params['pd.extraBattery1.inputWatts'], 210);
+});
+
 test('river3 decoder infers cfg_ac_out_open when firmware omits it', () => {
   const params = decodeModelTelemetry({
     output_power_off_memory: 1,
