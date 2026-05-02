@@ -85,6 +85,49 @@ function xorWithSeqByte(bytes, seq) {
         out[i] = bytes[i] ^ key;
     return out;
 }
+function xorWithKey(bytes, key) {
+    const k = key & 0xff;
+    const out = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i += 1)
+        out[i] = bytes[i] ^ k;
+    return out;
+}
+function xorWithRollingKey(bytes, keys) {
+    if (keys.length === 0)
+        return bytes.slice();
+    const out = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i += 1)
+        out[i] = bytes[i] ^ (keys[i % keys.length] & 0xff);
+    return out;
+}
+function buildEncCandidates(pdata, seq, encType, src) {
+    const candidates = [pdata];
+    if (encType !== 1 || seq === 0)
+        return candidates;
+    const seen = new Set([Buffer.from(pdata).toString('hex')]);
+    const pushUnique = (buf) => {
+        const key = Buffer.from(buf).toString('hex');
+        if (seen.has(key))
+            return;
+        seen.add(key);
+        candidates.push(buf);
+    };
+    // Existing behavior kept: source 32 is usually plaintext.
+    if (src !== 32)
+        pushUnique(xorWithSeqByte(pdata, seq));
+    const b0 = seq & 0xff;
+    const b1 = (seq >> 8) & 0xff;
+    const b2 = (seq >> 16) & 0xff;
+    const b3 = (seq >> 24) & 0xff;
+    const seqBytes = [b0, b1, b2, b3];
+    pushUnique(xorWithKey(pdata, b0));
+    pushUnique(xorWithKey(pdata, b1));
+    pushUnique(xorWithKey(pdata, b2));
+    pushUnique(xorWithKey(pdata, b3));
+    pushUnique(xorWithRollingKey(pdata, seqBytes));
+    pushUnique(xorWithRollingKey(pdata, [b0, b1]));
+    return candidates;
+}
 function readFixed32Float(bytes, offset) {
     if (offset + 4 > bytes.length)
         return null;
@@ -397,10 +440,7 @@ export function parseEcoflowPayload(rawBuffer) {
             const envelope = parseHeaderEnvelope(h);
             if (!envelope.pdata || envelope.pdata.length === 0)
                 continue;
-            const tries = [envelope.pdata];
-            if (envelope.encType === 1 && envelope.seq !== 0 && envelope.src !== 32) {
-                tries.push(xorWithSeqByte(envelope.pdata, envelope.seq));
-            }
+            const tries = buildEncCandidates(envelope.pdata, envelope.seq, envelope.encType, envelope.src);
             for (const pdata of tries) {
                 const known = extractKnownTelemetryFromProto(pdata, {
                     cmdFunc: envelope.cmdFunc,
@@ -441,6 +481,17 @@ export function parseEcoflowPayload(rawBuffer) {
                         },
                     };
                 }
+            }
+            if (envelope.encType === 1) {
+                return {
+                    payload: null,
+                    params: null,
+                    debug: {
+                        mode: `encrypted-unknown(cmdFunc=${envelope.cmdFunc},cmdId=${envelope.cmdId},src=${envelope.src})`,
+                        preview: toUtf8(envelope.pdata).slice(0, 120),
+                        hex,
+                    },
+                };
             }
         }
     }

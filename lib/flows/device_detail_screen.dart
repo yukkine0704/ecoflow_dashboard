@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -23,7 +24,8 @@ class DeviceDetailScreen extends StatefulWidget {
   State<DeviceDetailScreen> createState() => _DeviceDetailScreenState();
 }
 
-class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
+class _DeviceDetailScreenState extends State<DeviceDetailScreen>
+    with SingleTickerProviderStateMixin {
   static const Map<String, String> _deviceImageAssetsById = <String, String>{
     'P351ZAHAPH2R2706': 'assets/Delta-3.png',
     'R651ZAB5XH111262': 'assets/River-3.png',
@@ -31,11 +33,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   late BridgeDeviceSnapshot _snapshot;
   StreamSubscription<BridgeDeviceSnapshot>? _deviceSub;
+  late final AnimationController _thermalController;
 
   @override
   void initState() {
     super.initState();
     _snapshot = widget.initialSnapshot;
+    _thermalController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    )..repeat();
     _deviceSub = widget.repository.deviceUpdates.listen((updated) {
       if (!mounted || updated.deviceId != widget.deviceId) {
         return;
@@ -47,6 +54,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   @override
   void dispose() {
     unawaited(_deviceSub?.cancel());
+    _thermalController.dispose();
     super.dispose();
   }
 
@@ -184,6 +192,206 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     return 'Est. ${estimatedHours.toStringAsFixed(0)}h remaining';
   }
 
+  List<_OutputChannelVm> _outputChannels() {
+    const channelCandidates = <String, List<String>>{
+      'AC Output': ['powgetacout', 'powgetac', 'acoutputwatts', 'outpower'],
+      'Puerto 12V': ['powget12v', 'dc12v', '12vout'],
+      'Puerto 24V': ['powget24v', '24vout'],
+      'USB-C 1': ['powgettypec1', 'typec1', 'usbc1'],
+      'USB-C 2': ['powgettypec2', 'typec2', 'usbc2'],
+      'USB-A 1': ['powgetqcusb1', 'qcusb1', 'usba1', 'usb1'],
+      'USB-A 2': ['powgetqcusb2', 'qcusb2', 'usba2', 'usb2'],
+      'DC Port': ['powgetdcp', 'dcp', 'dcout'],
+    };
+
+    final normalizedEntries = _snapshot.metrics.entries.map((entry) {
+      final normalized =
+          entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      return (original: entry.key, normalized: normalized, value: entry.value);
+    }).toList();
+
+    final channels = <_OutputChannelVm>[];
+    final usedKeys = <String>{};
+
+    for (final candidate in channelCandidates.entries) {
+      double? watts;
+      String? sourceKey;
+      for (final entry in normalizedEntries) {
+        final isMatch = candidate.value.any(entry.normalized.contains);
+        if (!isMatch) continue;
+        final asNum = entry.value is num
+            ? (entry.value as num).toDouble()
+            : double.tryParse(entry.value.toString());
+        if (asNum == null) continue;
+        watts = asNum;
+        sourceKey = entry.original;
+        break;
+      }
+      channels.add(
+        _OutputChannelVm(
+          label: candidate.key,
+          watts: watts,
+          metricKey: sourceKey,
+          category: candidate.key.toLowerCase().contains('usb')
+              ? 'usb'
+              : (candidate.key.toLowerCase().contains('ac') ? 'ac' : 'dc'),
+          isDerivedFallback: false,
+        ),
+      );
+      if (sourceKey != null) {
+        usedKeys.add(sourceKey);
+      }
+    }
+
+    for (final entry in normalizedEntries) {
+      if (usedKeys.contains(entry.original)) continue;
+      if (!entry.normalized.contains('powget')) continue;
+      final asNum = entry.value is num
+          ? (entry.value as num).toDouble()
+          : double.tryParse(entry.value.toString());
+      channels.add(
+        _OutputChannelVm(
+          label: entry.original,
+          watts: asNum,
+          metricKey: entry.original,
+          category: entry.normalized.contains('usb') ||
+                  entry.normalized.contains('typec')
+              ? 'usb'
+              : (entry.normalized.contains('ac') ? 'ac' : 'dc'),
+          isDerivedFallback: true,
+        ),
+      );
+    }
+
+    final hasMeasured = channels.any((c) => c.watts != null);
+    if (!hasMeasured) {
+      channels.addAll([
+        _OutputChannelVm(
+          label: 'AC (resumen)',
+          watts: _metricAsDouble('outputByType.acW'),
+          metricKey: 'outputByType.acW',
+          category: 'ac',
+          isDerivedFallback: true,
+        ),
+        _OutputChannelVm(
+          label: 'DC (resumen)',
+          watts: _metricAsDouble('outputByType.dcW'),
+          metricKey: 'outputByType.dcW',
+          category: 'dc',
+          isDerivedFallback: true,
+        ),
+      ]);
+    }
+
+    channels.sort((a, b) => a.label.compareTo(b.label));
+    return channels;
+  }
+
+  _ThermalBand _thermalBandFor(double tempC) {
+    if (tempC < 30) return _ThermalBand.cool;
+    if (tempC < 40) return _ThermalBand.nominal;
+    if (tempC < 48) return _ThermalBand.warm;
+    return _ThermalBand.critical;
+  }
+
+  List<_ThermalCellVm> _thermalCells() {
+    final entries = <_ThermalCellVm>[];
+    final regexIndexed = RegExp(
+      r'(?:cell|batterycell|battcell)(?:temp)?[._-]?(\d+)$',
+      caseSensitive: false,
+    );
+    final regexGeneric = RegExp(r'cell.*temp', caseSensitive: false);
+
+    for (final entry in _snapshot.metrics.entries) {
+      final value = entry.value;
+      final temp = value is num
+          ? value.toDouble()
+          : (value is String ? double.tryParse(value) : null);
+      if (temp == null || temp < -50 || temp > 120) continue;
+
+      final key = entry.key;
+      final lower = key.toLowerCase();
+      final indexed = regexIndexed.firstMatch(lower);
+      if (indexed != null) {
+        final index = int.tryParse(indexed.group(1) ?? '');
+        if (index == null) continue;
+        entries.add(
+          _ThermalCellVm(
+            id: key,
+            label: 'C$index',
+            index: index,
+            tempC: temp,
+            band: _thermalBandFor(temp),
+          ),
+        );
+        continue;
+      }
+
+      if (regexGeneric.hasMatch(lower)) {
+        entries.add(
+          _ThermalCellVm(
+            id: key,
+            label: 'Cell',
+            index: 9999 + entries.length,
+            tempC: temp,
+            band: _thermalBandFor(temp),
+          ),
+        );
+      }
+    }
+
+    entries.sort((a, b) => a.index.compareTo(b.index));
+    final dedup = <String, _ThermalCellVm>{};
+    for (final cell in entries) {
+      dedup[cell.id] = cell;
+    }
+    return dedup.values.toList();
+  }
+
+  _ThermalSummaryVm _thermalSummary() {
+    final cells = _thermalCells();
+    final bmsTemp = _firstTemperatureValue(const ['bms.temp', 'pd.temp']);
+    final batteryTemp = _firstTemperatureValue(const [
+          'battery.maxCellTempC',
+          'pd.bmsMaxCellTemp',
+          'bms.maxCellTemp',
+          'temperatureC',
+        ]) ??
+        _snapshot.temperatureC;
+
+    final sourceTemps = <double>[...cells.map((e) => e.tempC)];
+    if (bmsTemp != null) sourceTemps.add(bmsTemp);
+    if (batteryTemp != null) sourceTemps.add(batteryTemp);
+
+    final dominantBand = sourceTemps.isEmpty
+        ? _ThermalBand.nominal
+        : sourceTemps
+            .map(_thermalBandFor)
+            .reduce((a, b) => a.severity >= b.severity ? a : b);
+
+    final min = sourceTemps.isEmpty ? null : sourceTemps.reduce(math.min);
+    final max = sourceTemps.isEmpty ? null : sourceTemps.reduce(math.max);
+
+    return _ThermalSummaryVm(
+      cells: cells,
+      bmsTempC: bmsTemp,
+      batteryTempC: batteryTemp,
+      minTempC: min,
+      maxTempC: max,
+      dominantBand: dominantBand,
+    );
+  }
+
+  Color _bandColor(BuildContext context, _ThermalBand band, {bool chip = false}) {
+    final cs = Theme.of(context).colorScheme;
+    return switch (band) {
+      _ThermalBand.cool => chip ? const Color(0xFF62C1A6) : cs.secondary,
+      _ThermalBand.nominal => chip ? const Color(0xFF7FA892) : cs.tertiary,
+      _ThermalBand.warm => chip ? const Color(0xFFF2A356) : cs.primary,
+      _ThermalBand.critical => chip ? const Color(0xFFE45A4F) : cs.error,
+    };
+  }
+
   Widget _buildDeviceHeroCard(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
@@ -204,18 +412,24 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                   fit: isMobile ? BoxFit.cover : BoxFit.contain,
                 )
               : (_snapshot.imageUrl == null
-              ? Container(
-                  color: colors.primaryContainer.withValues(alpha: 0.32),
-                  child: const Icon(Icons.battery_charging_full_rounded, size: 56),
-                )
-              : Image.network(
-                  _snapshot.imageUrl!,
-                  fit: isMobile ? BoxFit.cover : BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: colors.primaryContainer.withValues(alpha: 0.32),
-                    child: const Icon(Icons.battery_charging_full_rounded, size: 56),
-                  ),
-                )),
+                    ? Container(
+                        color: colors.primaryContainer.withValues(alpha: 0.32),
+                        child: const Icon(
+                          Icons.battery_charging_full_rounded,
+                          size: 56,
+                        ),
+                      )
+                    : Image.network(
+                        _snapshot.imageUrl!,
+                        fit: isMobile ? BoxFit.cover : BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.primaryContainer.withValues(alpha: 0.32),
+                          child: const Icon(
+                            Icons.battery_charging_full_rounded,
+                            size: 56,
+                          ),
+                        ),
+                      )),
         ),
       );
     }
@@ -253,7 +467,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             children: [
               Text(
                 'Battery Level',
-                style: textTheme.titleLarge?.copyWith(color: colors.onSurfaceVariant),
+                style: textTheme.titleLarge?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
               const Spacer(),
               Text(
@@ -281,14 +497,26 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           const SizedBox(height: AppSpacing.sm),
           Row(
             children: [
-              Text('0%', style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+              Text(
+                '0%',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
               const Spacer(),
               Text(
                 _estimateLabel(),
-                style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant),
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
               ),
               const Spacer(),
-              Text('100%', style: textTheme.bodyMedium?.copyWith(color: colors.onSurfaceVariant)),
+              Text(
+                '100%',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: colors.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ],
@@ -319,6 +547,305 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     );
   }
 
+  Widget _buildOutputChannelsCard(BuildContext context) {
+    final channels = _outputChannels();
+    final usbChannels = channels.where((c) => c.category == 'usb').toList();
+    final topChannels = channels.where((c) => c.category != 'usb').toList();
+    final cs = Theme.of(context).colorScheme;
+
+    Widget channelTile(_OutputChannelVm channel, {bool compact = false}) {
+      final on = (channel.watts ?? 0) > 0;
+      final bg = on
+          ? cs.surfaceContainerHighest.withValues(alpha: 0.9)
+          : cs.surfaceContainerLow;
+      final color = on ? cs.primary : cs.onSurfaceVariant;
+      return Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 12 : 14,
+          vertical: compact ? 10 : 12,
+        ),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(compact ? 18 : 22),
+        ),
+        child: Column(
+          crossAxisAlignment:
+              compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          children: [
+            Text(
+              channel.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                    letterSpacing: 0.4,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              channel.watts == null ? 'N/D' : '${channel.watts!.toStringAsFixed(0)}W',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return AppCard(
+      surfaceLevel: 1,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('DC Channels', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.md),
+          if (topChannels.isEmpty)
+            Text(
+              'No hay datos de salidas por puerto disponibles.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: topChannels
+                  .map(
+                    (channel) => SizedBox(
+                      width: MediaQuery.sizeOf(context).width > 520
+                          ? 220
+                          : (MediaQuery.sizeOf(context).width - 72) / 2,
+                      child: channelTile(channel),
+                    ),
+                  )
+                  .toList(),
+            ),
+          const SizedBox(height: AppSpacing.md),
+          Text('Puertos USB', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: AppSpacing.sm),
+          if (usbChannels.isEmpty)
+            Text(
+              'Sin telemetría USB en este momento.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: usbChannels.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                childAspectRatio: 1.65,
+              ),
+              itemBuilder: (context, index) =>
+                  channelTile(usbChannels[index], compact: true),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildThermalCard(BuildContext context) {
+    final summary = _thermalSummary();
+    final cs = Theme.of(context).colorScheme;
+    final indicatorColor = _bandColor(context, summary.dominantBand, chip: true);
+
+    Widget thermalHeader() {
+      final label = switch (summary.dominantBand) {
+        _ThermalBand.cool => 'Cool',
+        _ThermalBand.nominal => 'Nominal',
+        _ThermalBand.warm => 'Warm',
+        _ThermalBand.critical => 'Critical',
+      };
+
+      return Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'THERMAL MONITORING',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                        letterSpacing: 1.2,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Cell Array Map',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: indicatorColor.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: indicatorColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          RepaintBoundary(
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: _ThermalOrb(
+                controller: _thermalController,
+                band: summary.dominantBand,
+                color: indicatorColor,
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget cellBubble(_ThermalCellVm cell) {
+      final color = _bandColor(context, cell.band, chip: true);
+      final isHot =
+          cell.band == _ThermalBand.warm || cell.band == _ThermalBand.critical;
+      return AnimatedBuilder(
+        animation: _thermalController,
+        builder: (context, child) {
+          final phase = _thermalController.value;
+          final pulse = isHot ? (0.96 + 0.08 * math.sin(phase * math.pi * 2)) : 1.0;
+          return Transform.scale(scale: pulse, child: child);
+        },
+        child: Container(
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: color.withValues(alpha: 0.23),
+            boxShadow: isHot
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: 0.22),
+                      blurRadius: 18,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Text(
+            '${cell.tempC.toStringAsFixed(1)}°',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ),
+      );
+    }
+
+    return AppCard(
+      surfaceLevel: 2,
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          thermalHeader(),
+          const SizedBox(height: AppSpacing.md),
+          if (summary.cells.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                'Sin temperaturas de celdas disponibles por ahora. Mostramos sensores generales cuando estén presentes.',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            )
+          else
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: summary.cells.length,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 4,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+                childAspectRatio: 1,
+              ),
+              itemBuilder: (context, index) => cellBubble(summary.cells[index]),
+            ),
+          const SizedBox(height: AppSpacing.md),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: [
+              AppStatusBadge(
+                label: summary.bmsTempC == null
+                    ? 'BMS N/D'
+                    : 'BMS ${summary.bmsTempC!.toStringAsFixed(1)}°C',
+                tone: summary.bmsTempC == null
+                    ? AppStatusTone.neutral
+                    : (summary.bmsTempC! >= 48
+                          ? AppStatusTone.danger
+                          : (summary.bmsTempC! >= 40
+                                ? AppStatusTone.warning
+                                : AppStatusTone.active)),
+              ),
+              AppStatusBadge(
+                label: summary.batteryTempC == null
+                    ? 'Battery N/D'
+                    : 'Battery ${summary.batteryTempC!.toStringAsFixed(1)}°C',
+                tone: summary.batteryTempC == null
+                    ? AppStatusTone.neutral
+                    : (summary.batteryTempC! >= 48
+                          ? AppStatusTone.danger
+                          : (summary.batteryTempC! >= 40
+                                ? AppStatusTone.warning
+                                : AppStatusTone.active)),
+              ),
+              AppStatusBadge(
+                label: summary.maxTempC == null
+                    ? 'Peak N/D'
+                    : 'Peak ${summary.maxTempC!.toStringAsFixed(1)}°C',
+                tone: summary.maxTempC == null
+                    ? AppStatusTone.neutral
+                    : (summary.maxTempC! >= 48
+                          ? AppStatusTone.danger
+                          : (summary.maxTempC! >= 40
+                                ? AppStatusTone.warning
+                                : AppStatusTone.active)),
+              ),
+              AppStatusBadge(
+                label: summary.minTempC == null
+                    ? 'Min N/D'
+                    : 'Min ${summary.minTempC!.toStringAsFixed(1)}°C',
+                tone: AppStatusTone.neutral,
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Active cells: ${summary.cells.length}${summary.cells.isNotEmpty ? '/${summary.cells.length}' : ''}',
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: cs.onSurfaceVariant,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bmsTempInfo = _bmsTemperatureInfo();
@@ -334,6 +861,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
             outputW: _snapshot.totalOutputW,
             maxW: 2200,
           ),
+          const SizedBox(height: AppSpacing.md),
+          _buildOutputChannelsCard(context),
+          const SizedBox(height: AppSpacing.md),
+          _buildThermalCard(context),
           const SizedBox(height: AppSpacing.md),
           AppCard(
             surfaceLevel: 1,
@@ -529,5 +1060,166 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
         ],
       ),
     );
+  }
+}
+
+enum _ThermalBand {
+  cool(0),
+  nominal(1),
+  warm(2),
+  critical(3);
+
+  const _ThermalBand(this.severity);
+  final int severity;
+}
+
+class _OutputChannelVm {
+  const _OutputChannelVm({
+    required this.label,
+    required this.watts,
+    required this.metricKey,
+    required this.category,
+    required this.isDerivedFallback,
+  });
+
+  final String label;
+  final double? watts;
+  final String? metricKey;
+  final String category;
+  final bool isDerivedFallback;
+}
+
+class _ThermalCellVm {
+  const _ThermalCellVm({
+    required this.id,
+    required this.label,
+    required this.index,
+    required this.tempC,
+    required this.band,
+  });
+
+  final String id;
+  final String label;
+  final int index;
+  final double tempC;
+  final _ThermalBand band;
+}
+
+class _ThermalSummaryVm {
+  const _ThermalSummaryVm({
+    required this.cells,
+    required this.bmsTempC,
+    required this.batteryTempC,
+    required this.minTempC,
+    required this.maxTempC,
+    required this.dominantBand,
+  });
+
+  final List<_ThermalCellVm> cells;
+  final double? bmsTempC;
+  final double? batteryTempC;
+  final double? minTempC;
+  final double? maxTempC;
+  final _ThermalBand dominantBand;
+}
+
+class _ThermalOrb extends StatelessWidget {
+  const _ThermalOrb({
+    required this.controller,
+    required this.band,
+    required this.color,
+  });
+
+  final Animation<double> controller;
+  final _ThermalBand band;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: controller,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: _ThermalOrbPainter(
+            phase: controller.value,
+            band: band,
+            color: color,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ThermalOrbPainter extends CustomPainter {
+  const _ThermalOrbPainter({
+    required this.phase,
+    required this.band,
+    required this.color,
+  });
+
+  final double phase;
+  final _ThermalBand band;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = size.shortestSide * 0.43;
+
+    final glowPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..color = color.withValues(alpha: band.severity >= 2 ? 0.22 : 0.14)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+    canvas.drawCircle(center, radius + 3, glowPaint);
+
+    final base = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          color.withValues(alpha: 0.55),
+          color.withValues(alpha: 0.18),
+        ],
+      ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawCircle(center, radius, base);
+
+    final ringPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color.withValues(alpha: 0.8);
+    canvas.drawCircle(
+      center,
+      radius * (0.85 + 0.05 * math.sin(phase * math.pi * 2)),
+      ringPaint,
+    );
+
+    if (band.severity >= 2) {
+      final path = Path();
+      final spikes = 8;
+      for (var i = 0; i <= spikes; i++) {
+        final t = i / spikes;
+        final ang = t * math.pi * 2 + (phase * math.pi * 2);
+        final r =
+            radius * (0.45 + 0.1 * math.sin((phase * 4 + t * 7) * math.pi * 2));
+        final point =
+            Offset(center.dx + math.cos(ang) * r, center.dy + math.sin(ang) * r);
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      final core = Paint()
+        ..style = PaintingStyle.fill
+        ..color = color.withValues(alpha: 0.35);
+      canvas.drawPath(path, core);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThermalOrbPainter oldDelegate) {
+    return oldDelegate.phase != phase ||
+        oldDelegate.band != band ||
+        oldDelegate.color != color;
   }
 }
