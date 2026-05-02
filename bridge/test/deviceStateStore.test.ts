@@ -74,3 +74,17 @@ test('delta3 fallback corrects pvL=0 when total input indicates second panel', (
   assert.ok(snapshot);
   assert.equal(snapshot.metrics['inputByType.solarW'], 62);
 });
+
+test('connectivity is exposed in snapshot and fleet payload', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'RIVER3SN';
+  store.upsertConnectivity(deviceId, 'assume_offline');
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.connectivity, 'assume_offline');
+  assert.equal(snapshot.online, null);
+
+  const fleet = store.getFleetState();
+  assert.equal(fleet.devices[0]?.connectivity, 'assume_offline');
+});

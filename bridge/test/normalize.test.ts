@@ -18,5 +18,9 @@ test('canonicalizeMetric normalizes snake_case/camelCase/PascalCase', () => {
     channel: 'bms',
     state: 'maxCellTemp',
   });
-});
 
+  assert.deepEqual(canonicalizeMetric('pd', 'pow_get_4p8_1'), {
+    channel: 'pd',
+    state: 'powGet4p81',
+  });
+});

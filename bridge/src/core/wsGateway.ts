@@ -5,6 +5,7 @@ import type { BridgeConfig } from '../config/index.js';
 import type { DeviceStateStore } from './deviceStateStore.js';
 import type {
   BridgeEnvelope,
+  BridgeEnvelopeV2,
   DeviceCatalogPayload,
   DeviceDeltaPayload,
   DeviceSnapshotPayload,
@@ -56,12 +57,22 @@ export class WsGateway {
 
   broadcastFleetState(): void {
     const payload: FleetStatePayload = this.store.getFleetState();
-    const envelope: BridgeEnvelope<FleetStatePayload> = {
-      version: 'v1',
-      event: 'fleet_state',
-      payload,
-    };
-    this.broadcast(envelope);
+    if (this.config.wsEmitV1) {
+      const envelope: BridgeEnvelope<FleetStatePayload> = {
+        version: 'v1',
+        event: 'fleet_state',
+        payload,
+      };
+      this.broadcast(envelope);
+    }
+    if (this.config.wsEmitV2) {
+      const envelopeV2: BridgeEnvelopeV2<FleetStatePayload> = {
+        version: 'v2',
+        event: 'fleet_state',
+        payload,
+      };
+      this.broadcast(envelopeV2);
+    }
   }
 
   broadcastDeviceSnapshot(deviceId: string): void {
@@ -71,55 +82,115 @@ export class WsGateway {
     }
 
     const payload: DeviceSnapshotPayload = { snapshot };
-    const envelope: BridgeEnvelope<DeviceSnapshotPayload> = {
-      version: 'v1',
-      event: 'device_snapshot',
-      payload,
-    };
-    this.broadcast(envelope);
+    if (this.config.wsEmitV1) {
+      const envelope: BridgeEnvelope<DeviceSnapshotPayload> = {
+        version: 'v1',
+        event: 'device_snapshot',
+        payload,
+      };
+      this.broadcast(envelope);
+    }
+    if (this.config.wsEmitV2) {
+      const envelopeV2: BridgeEnvelopeV2<DeviceSnapshotPayload> = {
+        version: 'v2',
+        event: 'device_snapshot',
+        payload,
+      };
+      this.broadcast(envelopeV2);
+    }
   }
 
   broadcastDeviceDelta(delta: DeviceDeltaPayload): void {
-    const envelope: BridgeEnvelope<DeviceDeltaPayload> = {
-      version: 'v1',
-      event: 'device_delta',
-      payload: delta,
-    };
-    this.broadcast(envelope);
+    if (this.config.wsEmitV1) {
+      const envelope: BridgeEnvelope<DeviceDeltaPayload> = {
+        version: 'v1',
+        event: 'device_delta',
+        payload: delta,
+      };
+      this.broadcast(envelope);
+    }
+    if (this.config.wsEmitV2) {
+      const envelopeV2: BridgeEnvelopeV2<DeviceDeltaPayload> = {
+        version: 'v2',
+        event: 'device_delta',
+        payload: delta,
+      };
+      this.broadcast(envelopeV2);
+    }
   }
 
   broadcastCatalog(payload: DeviceCatalogPayload): void {
     this.catalog = payload;
-    const envelope: BridgeEnvelope<DeviceCatalogPayload> = {
-      version: 'v1',
-      event: 'device_catalog',
-      payload,
-    };
-    this.broadcast(envelope);
+    if (this.config.wsEmitV1) {
+      const envelope: BridgeEnvelope<DeviceCatalogPayload> = {
+        version: 'v1',
+        event: 'device_catalog',
+        payload,
+      };
+      this.broadcast(envelope);
+    }
+    if (this.config.wsEmitV2) {
+      const envelopeV2: BridgeEnvelopeV2<DeviceCatalogPayload> = {
+        version: 'v2',
+        event: 'device_catalog',
+        payload,
+      };
+      this.broadcast(envelopeV2);
+    }
   }
 
   private onConnection(ws: WebSocket, _request: IncomingMessage): void {
-    const fleetEnvelope: BridgeEnvelope<FleetStatePayload> = {
-      version: 'v1',
-      event: 'fleet_state',
-      payload: this.store.getFleetState(),
-    };
-    ws.send(JSON.stringify(fleetEnvelope));
+    if (this.config.wsEmitV1) {
+      const fleetEnvelope: BridgeEnvelope<FleetStatePayload> = {
+        version: 'v1',
+        event: 'fleet_state',
+        payload: this.store.getFleetState(),
+      };
+      ws.send(JSON.stringify(fleetEnvelope));
+    }
+    if (this.config.wsEmitV2) {
+      const fleetEnvelopeV2: BridgeEnvelopeV2<FleetStatePayload> = {
+        version: 'v2',
+        event: 'fleet_state',
+        payload: this.store.getFleetState(),
+      };
+      ws.send(JSON.stringify(fleetEnvelopeV2));
+    }
 
-    const catalogEnvelope: BridgeEnvelope<DeviceCatalogPayload> = {
-      version: 'v1',
-      event: 'device_catalog',
-      payload: this.catalog,
-    };
-    ws.send(JSON.stringify(catalogEnvelope));
+    if (this.config.wsEmitV1) {
+      const catalogEnvelope: BridgeEnvelope<DeviceCatalogPayload> = {
+        version: 'v1',
+        event: 'device_catalog',
+        payload: this.catalog,
+      };
+      ws.send(JSON.stringify(catalogEnvelope));
+    }
+    if (this.config.wsEmitV2) {
+      const catalogEnvelopeV2: BridgeEnvelopeV2<DeviceCatalogPayload> = {
+        version: 'v2',
+        event: 'device_catalog',
+        payload: this.catalog,
+      };
+      ws.send(JSON.stringify(catalogEnvelopeV2));
+    }
 
     for (const snapshot of this.store.getAllSnapshots()) {
-      const snapshotEnvelope: BridgeEnvelope<DeviceSnapshotPayload> = {
-        version: 'v1',
-        event: 'device_snapshot',
-        payload: { snapshot },
-      };
-      ws.send(JSON.stringify(snapshotEnvelope));
+      if (this.config.wsEmitV1) {
+        const snapshotEnvelope: BridgeEnvelope<DeviceSnapshotPayload> = {
+          version: 'v1',
+          event: 'device_snapshot',
+          payload: { snapshot },
+        };
+        ws.send(JSON.stringify(snapshotEnvelope));
+      }
+      if (this.config.wsEmitV2) {
+        const snapshotEnvelopeV2: BridgeEnvelopeV2<DeviceSnapshotPayload> = {
+          version: 'v2',
+          event: 'device_snapshot',
+          payload: { snapshot },
+        };
+        ws.send(JSON.stringify(snapshotEnvelopeV2));
+      }
     }
   }
 

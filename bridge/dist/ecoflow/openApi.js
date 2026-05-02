@@ -81,3 +81,41 @@ export async function fetchOpenApiDeviceList(input) {
     }
     return devices;
 }
+export async function fetchOpenApiDeviceStatusMap(input) {
+    const devices = await fetchOpenApiDeviceList(input);
+    const endpoint = '/iot-open/sign/device/list';
+    const headers = createSignedHeaders({
+        accessKey: input.accessKey,
+        secretKey: input.secretKey,
+    });
+    const response = await fetch(`${input.baseUrl}${endpoint}`, {
+        method: 'GET',
+        headers,
+    });
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText} for ${endpoint}`);
+    }
+    const raw = await response.json();
+    const envelope = asMap(raw);
+    if (!envelope)
+        return new Map();
+    const data = asMap(envelope.data) ?? envelope;
+    const listRaw = Array.isArray(data.list) ? data.list : (Array.isArray(envelope.data) ? envelope.data : []);
+    const out = new Map();
+    for (const row of listRaw) {
+        const map = asMap(row);
+        if (!map)
+            continue;
+        const sn = pickText(map, ['sn', 'deviceSn', 'serialNumber', 'deviceSN']);
+        if (!sn)
+            continue;
+        const statusRaw = map.status;
+        const online = statusRaw === 1 || statusRaw === '1' || statusRaw === true;
+        out.set(sn, online);
+    }
+    for (const d of devices) {
+        if (!out.has(d.sn))
+            out.set(d.sn, false);
+    }
+    return out;
+}

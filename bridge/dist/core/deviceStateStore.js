@@ -242,10 +242,26 @@ export class DeviceStateStore {
             online = false;
         }
         record.snapshot.online = online;
+        record.snapshot.connectivity = online === true ? 'online' : 'offline';
         record.snapshot.updatedAt = now;
         return {
             deviceId,
             changed: { online },
+            updatedAt: now,
+        };
+    }
+    upsertConnectivity(deviceId, connectivity) {
+        const now = new Date().toISOString();
+        const record = this.getOrCreate(deviceId, now);
+        record.snapshot.connectivity = connectivity;
+        record.snapshot.online = connectivity === 'online' ? true : (connectivity === 'offline' ? false : null);
+        record.snapshot.updatedAt = now;
+        return {
+            deviceId,
+            changed: {
+                connectivity,
+                online: record.snapshot.online,
+            },
             updatedAt: now,
         };
     }
@@ -356,6 +372,7 @@ export class DeviceStateStore {
                 displayName: snapshot.displayName,
                 model: snapshot.model,
                 online: snapshot.online,
+                connectivity: snapshot.connectivity,
                 batteryPercent: snapshot.batteryPercent,
                 updatedAt: snapshot.updatedAt,
             })),
@@ -376,6 +393,7 @@ export class DeviceStateStore {
                 model: null,
                 imageUrl: null,
                 online: null,
+                connectivity: 'offline',
                 batteryPercent: null,
                 temperatureC: null,
                 totalInputW: null,

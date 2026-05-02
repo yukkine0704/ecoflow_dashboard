@@ -39,12 +39,22 @@ export class WsGateway {
     }
     broadcastFleetState() {
         const payload = this.store.getFleetState();
-        const envelope = {
-            version: 'v1',
-            event: 'fleet_state',
-            payload,
-        };
-        this.broadcast(envelope);
+        if (this.config.wsEmitV1) {
+            const envelope = {
+                version: 'v1',
+                event: 'fleet_state',
+                payload,
+            };
+            this.broadcast(envelope);
+        }
+        if (this.config.wsEmitV2) {
+            const envelopeV2 = {
+                version: 'v2',
+                event: 'fleet_state',
+                payload,
+            };
+            this.broadcast(envelopeV2);
+        }
     }
     broadcastDeviceSnapshot(deviceId) {
         const snapshot = this.store.getSnapshot(deviceId);
@@ -52,50 +62,110 @@ export class WsGateway {
             return;
         }
         const payload = { snapshot };
-        const envelope = {
-            version: 'v1',
-            event: 'device_snapshot',
-            payload,
-        };
-        this.broadcast(envelope);
+        if (this.config.wsEmitV1) {
+            const envelope = {
+                version: 'v1',
+                event: 'device_snapshot',
+                payload,
+            };
+            this.broadcast(envelope);
+        }
+        if (this.config.wsEmitV2) {
+            const envelopeV2 = {
+                version: 'v2',
+                event: 'device_snapshot',
+                payload,
+            };
+            this.broadcast(envelopeV2);
+        }
     }
     broadcastDeviceDelta(delta) {
-        const envelope = {
-            version: 'v1',
-            event: 'device_delta',
-            payload: delta,
-        };
-        this.broadcast(envelope);
+        if (this.config.wsEmitV1) {
+            const envelope = {
+                version: 'v1',
+                event: 'device_delta',
+                payload: delta,
+            };
+            this.broadcast(envelope);
+        }
+        if (this.config.wsEmitV2) {
+            const envelopeV2 = {
+                version: 'v2',
+                event: 'device_delta',
+                payload: delta,
+            };
+            this.broadcast(envelopeV2);
+        }
     }
     broadcastCatalog(payload) {
         this.catalog = payload;
-        const envelope = {
-            version: 'v1',
-            event: 'device_catalog',
-            payload,
-        };
-        this.broadcast(envelope);
+        if (this.config.wsEmitV1) {
+            const envelope = {
+                version: 'v1',
+                event: 'device_catalog',
+                payload,
+            };
+            this.broadcast(envelope);
+        }
+        if (this.config.wsEmitV2) {
+            const envelopeV2 = {
+                version: 'v2',
+                event: 'device_catalog',
+                payload,
+            };
+            this.broadcast(envelopeV2);
+        }
     }
     onConnection(ws, _request) {
-        const fleetEnvelope = {
-            version: 'v1',
-            event: 'fleet_state',
-            payload: this.store.getFleetState(),
-        };
-        ws.send(JSON.stringify(fleetEnvelope));
-        const catalogEnvelope = {
-            version: 'v1',
-            event: 'device_catalog',
-            payload: this.catalog,
-        };
-        ws.send(JSON.stringify(catalogEnvelope));
-        for (const snapshot of this.store.getAllSnapshots()) {
-            const snapshotEnvelope = {
+        if (this.config.wsEmitV1) {
+            const fleetEnvelope = {
                 version: 'v1',
-                event: 'device_snapshot',
-                payload: { snapshot },
+                event: 'fleet_state',
+                payload: this.store.getFleetState(),
             };
-            ws.send(JSON.stringify(snapshotEnvelope));
+            ws.send(JSON.stringify(fleetEnvelope));
+        }
+        if (this.config.wsEmitV2) {
+            const fleetEnvelopeV2 = {
+                version: 'v2',
+                event: 'fleet_state',
+                payload: this.store.getFleetState(),
+            };
+            ws.send(JSON.stringify(fleetEnvelopeV2));
+        }
+        if (this.config.wsEmitV1) {
+            const catalogEnvelope = {
+                version: 'v1',
+                event: 'device_catalog',
+                payload: this.catalog,
+            };
+            ws.send(JSON.stringify(catalogEnvelope));
+        }
+        if (this.config.wsEmitV2) {
+            const catalogEnvelopeV2 = {
+                version: 'v2',
+                event: 'device_catalog',
+                payload: this.catalog,
+            };
+            ws.send(JSON.stringify(catalogEnvelopeV2));
+        }
+        for (const snapshot of this.store.getAllSnapshots()) {
+            if (this.config.wsEmitV1) {
+                const snapshotEnvelope = {
+                    version: 'v1',
+                    event: 'device_snapshot',
+                    payload: { snapshot },
+                };
+                ws.send(JSON.stringify(snapshotEnvelope));
+            }
+            if (this.config.wsEmitV2) {
+                const snapshotEnvelopeV2 = {
+                    version: 'v2',
+                    event: 'device_snapshot',
+                    payload: { snapshot },
+                };
+                ws.send(JSON.stringify(snapshotEnvelopeV2));
+            }
         }
     }
     broadcast(envelope) {

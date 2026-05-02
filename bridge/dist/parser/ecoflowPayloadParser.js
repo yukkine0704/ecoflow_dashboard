@@ -431,6 +431,7 @@ export function parseEcoflowPayload(rawBuffer) {
         return {
             payload: directJson,
             params: extractParamsFromPayload(directJson),
+            envelope: null,
             debug: { mode: 'json', preview: text.slice(0, 120), hex },
         };
     }
@@ -450,6 +451,12 @@ export function parseEcoflowPayload(rawBuffer) {
                     return {
                         payload: known,
                         params: known,
+                        envelope: {
+                            cmdFunc: envelope.cmdFunc,
+                            cmdId: envelope.cmdId,
+                            encType: envelope.encType,
+                            src: envelope.src,
+                        },
                         debug: {
                             mode: `protobuf-known(cmdFunc=${envelope.cmdFunc},cmdId=${envelope.cmdId})`,
                             preview: JSON.stringify(known).slice(0, 120),
@@ -462,6 +469,12 @@ export function parseEcoflowPayload(rawBuffer) {
                     return {
                         payload: decoded,
                         params: extractParamsFromPayload(decoded),
+                        envelope: {
+                            cmdFunc: envelope.cmdFunc,
+                            cmdId: envelope.cmdId,
+                            encType: envelope.encType,
+                            src: envelope.src,
+                        },
                         debug: { mode: 'protobuf-json', preview: toUtf8(pdata).slice(0, 120), hex },
                     };
                 }
@@ -474,6 +487,12 @@ export function parseEcoflowPayload(rawBuffer) {
                     return {
                         payload: numeric,
                         params: numeric,
+                        envelope: {
+                            cmdFunc: envelope.cmdFunc,
+                            cmdId: envelope.cmdId,
+                            encType: envelope.encType,
+                            src: envelope.src,
+                        },
                         debug: {
                             mode: `protobuf-numeric(cmdId=${envelope.cmdId})`,
                             preview: JSON.stringify(numeric).slice(0, 120),
@@ -486,6 +505,12 @@ export function parseEcoflowPayload(rawBuffer) {
                 return {
                     payload: null,
                     params: null,
+                    envelope: {
+                        cmdFunc: envelope.cmdFunc,
+                        cmdId: envelope.cmdId,
+                        encType: envelope.encType,
+                        src: envelope.src,
+                    },
                     debug: {
                         mode: `encrypted-unknown(cmdFunc=${envelope.cmdFunc},cmdId=${envelope.cmdId},src=${envelope.src})`,
                         preview: toUtf8(envelope.pdata).slice(0, 120),
@@ -498,6 +523,7 @@ export function parseEcoflowPayload(rawBuffer) {
     return {
         payload: null,
         params: null,
+        envelope: null,
         debug: { mode: 'unknown', preview: text.slice(0, 120), hex },
     };
 }

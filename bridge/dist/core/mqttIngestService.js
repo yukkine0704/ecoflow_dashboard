@@ -1,7 +1,10 @@
 import mqtt from 'mqtt';
 import { randomUUID } from 'node:crypto';
+import { fetchOpenApiDeviceStatusMap } from '../ecoflow/openApi.js';
 import { parseEcoflowPayload } from '../parser/ecoflowPayloadParser.js';
 import { canonicalizeMetric } from '../mapping/normalize.js';
+import { decodeModelTelemetry } from '../parser/decoders/index.js';
+import { StatusTracker } from './statusTracker.js';
 function flattenParams(input) {
     const out = {};
     const push = (key, value) => {
@@ -63,15 +66,20 @@ export class MqttIngestService {
     events;
     cert;
     deviceIds;
+    deviceModels;
     client = null;
     commandTimer = null;
+    statusPollTimer = null;
     unknownParseCount = 0;
-    constructor(_config, store, events, cert, deviceIds) {
+    statusTracker;
+    constructor(_config, store, events, cert, deviceIds, deviceModels) {
         this._config = _config;
         this.store = store;
         this.events = events;
         this.cert = cert;
         this.deviceIds = deviceIds;
+        this.deviceModels = deviceModels;
+        this.statusTracker = new StatusTracker(this._config.statusAssumeOfflineSec, this._config.statusForceOfflineMultiplier);
     }
     start() {
         const protocol = this.cert.useTls ? 'mqtts' : 'mqtt';
@@ -100,6 +108,7 @@ export class MqttIngestService {
             });
             this.requestLatestQuotas();
             this.startCommandLoop();
+            this.startStatusPollLoop();
         });
         this.client.on('message', (topic, payloadBuffer) => {
             const sn = extractSnFromTopic(topic, this.cert.userId);
@@ -107,7 +116,10 @@ export class MqttIngestService {
                 return;
             }
             const parsed = parseEcoflowPayload(payloadBuffer);
-            const params = parsed.params;
+            const model = this.deviceModels.get(sn) ?? null;
+            const params = parsed.params
+                ? decodeModelTelemetry(parsed.params, { model, envelope: parsed.envelope })
+                : null;
             if (!params || Object.keys(params).length === 0) {
                 this.unknownParseCount += 1;
                 if (this.unknownParseCount <= 20 || this.unknownParseCount % 50 === 0) {
@@ -115,7 +127,10 @@ export class MqttIngestService {
                 }
                 return;
             }
+            this.statusTracker.onDataReceived(sn);
+            const connectivityDelta = this.store.upsertConnectivity(sn, this.statusTracker.state(sn));
             const changed = {};
+            Object.assign(changed, connectivityDelta.changed);
             const flatParams = flattenParams(params);
             for (const [rawKey, rawValue] of Object.entries(flatParams)) {
                 const key = rawKey.trim();
@@ -153,12 +168,12 @@ export class MqttIngestService {
             }
             const online = toBool((params.status ?? params.online ?? params.isOnline));
             if (online !== null) {
-                const statusDelta = this.store.upsertStatus(sn, online ? 'online' : 'offline');
+                this.statusTracker.onExplicitStatus(sn, online);
+                const statusDelta = this.store.upsertConnectivity(sn, this.statusTracker.state(sn));
                 Object.assign(changed, statusDelta.changed);
             }
             else {
-                // If we decoded telemetry for this SN, consider device online.
-                const statusDelta = this.store.upsertStatus(sn, 'online');
+                const statusDelta = this.store.upsertConnectivity(sn, this.statusTracker.state(sn));
                 Object.assign(changed, statusDelta.changed);
             }
             this.events.onDeviceDelta(sn, {
@@ -178,6 +193,10 @@ export class MqttIngestService {
         if (this.commandTimer) {
             clearInterval(this.commandTimer);
             this.commandTimer = null;
+        }
+        if (this.statusPollTimer) {
+            clearInterval(this.statusPollTimer);
+            this.statusPollTimer = null;
         }
         if (!this.client) {
             return;
@@ -206,6 +225,44 @@ export class MqttIngestService {
                 params: {},
             });
             this.client.publish(`/app/${this.cert.userId}/${sn}/thing/property/get`, payload, { qos: 1, retain: false });
+        }
+    }
+    startStatusPollLoop() {
+        if (this.statusPollTimer) {
+            clearInterval(this.statusPollTimer);
+        }
+        this.statusPollTimer = setInterval(() => {
+            void this.pollUncertainStatuses();
+        }, this._config.statusPollIntervalSec * 1000);
+    }
+    async pollUncertainStatuses() {
+        if (!this._config.openApiAccessKey || !this._config.openApiSecretKey) {
+            return;
+        }
+        const needsPoll = this.deviceIds.filter((sn) => this.statusTracker.wantsStatusPoll(sn));
+        if (needsPoll.length === 0)
+            return;
+        try {
+            const map = await fetchOpenApiDeviceStatusMap({
+                baseUrl: this._config.openApiBaseUrl,
+                accessKey: this._config.openApiAccessKey,
+                secretKey: this._config.openApiSecretKey,
+            });
+            for (const sn of needsPoll) {
+                const online = map.get(sn);
+                if (online === undefined)
+                    continue;
+                this.statusTracker.onExplicitStatus(sn, online);
+                const delta = this.store.upsertConnectivity(sn, this.statusTracker.state(sn));
+                this.events.onDeviceDelta(sn, {
+                    deviceId: sn,
+                    changed: delta.changed,
+                    updatedAt: new Date().toISOString(),
+                });
+            }
+        }
+        catch (error) {
+            console.warn(`[bridge][status-poll] failed: ${String(error)}`);
         }
     }
 }

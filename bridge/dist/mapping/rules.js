@@ -54,6 +54,8 @@ export const MAPPING_RULES = [
     { channel: '*', state: 'powGetTypec2', field: 'totalOutputW' },
     { channel: '*', state: 'powGetQcusb1', field: 'totalOutputW' },
     { channel: '*', state: 'powGetQcusb2', field: 'totalOutputW' },
+    { channel: '*', state: 'powGet4p81', field: 'totalOutputW' },
+    { channel: '*', state: 'powGet4p82', field: 'totalOutputW' },
     { channel: 'pd', state: 'remainTime', field: 'metric', metricKey: 'pd.remainTime' },
     { channel: 'pd', state: 'batteryType', field: 'metric', metricKey: 'pd.batteryType' },
 ];

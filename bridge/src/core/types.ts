@@ -1,4 +1,5 @@
 export type BridgeMetricValue = number | boolean | string | null;
+export type DeviceConnectivityState = 'online' | 'assume_offline' | 'offline';
 
 export interface DeviceSnapshot {
   deviceId: string;
@@ -6,6 +7,7 @@ export interface DeviceSnapshot {
   model: string | null;
   imageUrl: string | null;
   online: boolean | null;
+  connectivity: DeviceConnectivityState;
   batteryPercent: number | null;
   temperatureC: number | null;
   totalInputW: number | null;
@@ -19,6 +21,7 @@ export interface FleetItem {
   displayName: string;
   model: string | null;
   online: boolean | null;
+  connectivity: DeviceConnectivityState;
   batteryPercent: number | null;
   updatedAt: string;
 }
@@ -50,6 +53,12 @@ export interface DeviceCatalogPayload {
 
 export interface BridgeEnvelope<TPayload> {
   version: 'v1';
+  event: 'fleet_state' | 'device_snapshot' | 'device_delta' | 'device_catalog';
+  payload: TPayload;
+}
+
+export interface BridgeEnvelopeV2<TPayload> {
+  version: 'v2';
   event: 'fleet_state' | 'device_snapshot' | 'device_delta' | 'device_catalog';
   payload: TPayload;
 }

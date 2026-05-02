@@ -68,13 +68,14 @@ async function main() {
         imageUrl: device.imageUrl,
     })));
     const ws = new WsGateway(config, store);
+    const deviceModels = new Map(catalog.map((d) => [d.sn, d.model ?? null]));
     const ingest = new MqttIngestService(config, store, {
         onDeviceDelta: (_deviceId, delta) => {
             ws.broadcastDeviceDelta(delta);
             ws.broadcastFleetState();
             ws.broadcastDeviceSnapshot(delta.deviceId);
         },
-    }, certification, deviceIds);
+    }, certification, deviceIds, deviceModels);
     ws.start();
     ws.broadcastCatalog(buildCatalogPayload(catalog));
     ws.broadcastFleetState();

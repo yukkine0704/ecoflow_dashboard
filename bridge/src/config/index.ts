@@ -11,6 +11,11 @@ export interface BridgeConfig {
   openApiBaseUrl: string;
 
   deviceSnAllowlist: string[];
+  statusAssumeOfflineSec: number;
+  statusForceOfflineMultiplier: number;
+  statusPollIntervalSec: number;
+  wsEmitV1: boolean;
+  wsEmitV2: boolean;
 }
 
 function parseCsv(value: string | undefined): string[] {
@@ -21,6 +26,20 @@ function parseCsv(value: string | undefined): string[] {
     .split(',')
     .map((item) => item.trim())
     .filter((item) => item.length > 0);
+}
+
+function parseBool(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  return fallback;
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(value?.trim() || '', 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return parsed;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv): BridgeConfig {
@@ -52,5 +71,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BridgeConfig {
     openApiSecretKey,
     openApiBaseUrl: env.ECOFLOW_OPEN_BASE_URL?.trim() || 'https://api.ecoflow.com',
     deviceSnAllowlist: parseCsv(env.ECOFLOW_DEVICE_SNS),
+    statusAssumeOfflineSec: parsePositiveInt(env.ECOFLOW_STATUS_ASSUME_OFFLINE_SEC, 90),
+    statusForceOfflineMultiplier: parsePositiveInt(env.ECOFLOW_STATUS_FORCE_OFFLINE_MULTIPLIER, 3),
+    statusPollIntervalSec: parsePositiveInt(env.ECOFLOW_STATUS_POLL_INTERVAL_SEC, 60),
+    wsEmitV1: parseBool(env.BRIDGE_WS_EMIT_V1, true),
+    wsEmitV2: parseBool(env.BRIDGE_WS_EMIT_V2, true),
   };
 }
