@@ -66,6 +66,13 @@ Regla de fallback:
 - Mostrar métricas extra battery cuando existan:
   - `metrics.pd.powGet4p81`
   - `metrics.pd.powGet4p82`
+  - `metrics.pd.extraBattery1.soc` / `metrics.pd.extraBattery2.soc`
+  - `metrics.pd.extraBattery1.temp` / `metrics.pd.extraBattery2.temp`
+  - `metrics.pd.extraBattery1.maxCellTemp` / `metrics.pd.extraBattery2.maxCellTemp`
+  - `metrics.pd.extraBattery1.minCellTemp` / `metrics.pd.extraBattery2.minCellTemp`
+  - `metrics.pd.extraBattery1.inputWatts` / `metrics.pd.extraBattery2.inputWatts`
+  - `metrics.pd.extraBattery1.outputWatts` / `metrics.pd.extraBattery2.outputWatts`
+  - `metrics.pd.extraBattery1.cycles` / `metrics.pd.extraBattery2.cycles`
 - Mantener ocultas si son `null/undefined`.
 
 5. **Telemetría y logs app**
@@ -108,4 +115,3 @@ Regla de fallback:
 - Sin regresiones visuales/funcionales en dashboard.
 - Logs de conectividad coherentes con estados reales del bridge.
 - `v1` desactivable sin impacto.
-

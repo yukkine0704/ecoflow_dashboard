@@ -75,6 +75,42 @@ test('delta3 fallback corrects pvL=0 when total input indicates second panel', (
   assert.equal(snapshot.metrics['inputByType.solarW'], 62);
 });
 
+test('delta3 fallback prefers pd.inputWatts over bms.inputWatts for dual-solar inference', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'P351ZAHAPH2R2706';
+
+  store.upsertMetric(deviceId, 'bms', 'inputWatts', 200);
+  store.upsertMetric(deviceId, 'pd', 'inputWatts', 1007);
+  store.upsertMetric(deviceId, 'pd', 'powGetPv', 505.27899169921875);
+  store.upsertMetric(deviceId, 'pd', 'powGetAcIn', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp2', 0);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.metrics['inputByType.solarW'], 1007);
+  assert.equal(snapshot.metrics['pd.powGetPvL'], 501.72100830078125);
+});
+
+test('ignores implausible pd.inputWatts outlier to avoid solar overflow', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'P351ZAHAPH2R2706';
+
+  store.upsertMetric(deviceId, 'pd', 'inputWatts', 1007);
+  store.upsertMetric(deviceId, 'pd', 'powGetPv', 505.27899169921875);
+  store.upsertMetric(deviceId, 'pd', 'powGetAcIn', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp', 0);
+  store.upsertMetric(deviceId, 'pd', 'powGetDcp2', 0);
+
+  // Corrupted value observed in the wild.
+  store.upsertMetric(deviceId, 'pd', 'inputWatts', 2.749712204023792e+23);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.totalInputW, 1007);
+  assert.equal(snapshot.metrics['inputByType.solarW'], 1007);
+});
+
 test('connectivity is exposed in snapshot and fleet payload', () => {
   const store = new DeviceStateStore();
   const deviceId = 'RIVER3SN';

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 import 'core/bridge/bridge_settings_storage.dart';
 import 'design_system/design_system.dart';
 import 'flows/app_entry_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Hive.initFlutter();
   runApp(const EcoFlowApp());
 }
 

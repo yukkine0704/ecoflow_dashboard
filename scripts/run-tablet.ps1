@@ -1,7 +1,9 @@
 param(
     [string]$AvdName = "Medium_Tablet",
     [string]$DeviceId = "emulator-5554",
-    [int]$BootTimeoutSeconds = 120
+    [int]$BootTimeoutSeconds = 120,
+    [string]$BridgeDir = "D:\.DEV\.Flutter\ecoflow_dashboard\bridge",
+    [string]$BridgeScript = "dev"
 )
 
 $ErrorActionPreference = "Stop"
@@ -60,6 +62,14 @@ if (-not $deviceLine) {
         throw "El emulador no quedo listo en $BootTimeoutSeconds segundos."
     }
 }
+
+if (-not (Test-Path $BridgeDir)) {
+    throw "No se encontro el directorio del bridge en $BridgeDir"
+}
+
+Write-Step "Iniciando bridge en una consola aparte (npm run $BridgeScript)..."
+$bridgeCommand = "Set-Location -LiteralPath '$BridgeDir'; npm run $BridgeScript"
+Start-Process -FilePath "powershell.exe" -ArgumentList "-NoExit", "-Command", $bridgeCommand
 
 Write-Step "Ejecutando flutter run en $DeviceId..."
 flutter run -d $DeviceId

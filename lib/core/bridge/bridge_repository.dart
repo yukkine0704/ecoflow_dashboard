@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 
+import 'bridge_history_store.dart';
 import 'bridge_models.dart';
 import 'bridge_ws_client.dart';
 
@@ -14,8 +15,9 @@ class BridgeConnectionState {
 }
 
 class BridgeRepository {
-  BridgeRepository({BridgeWsClient? client})
-    : _client = client ?? BridgeWsClient();
+  BridgeRepository({BridgeWsClient? client, BridgeHistoryStore? historyStore})
+    : _client = client ?? BridgeWsClient(),
+      _historyStore = historyStore ?? BridgeHistoryStore();
 
   static const Map<String, ({String displayName, String model})>
   _directModeDeviceAliases = <String, ({String displayName, String model})>{
@@ -33,6 +35,7 @@ class BridgeRepository {
   };
 
   final BridgeWsClient _client;
+  final BridgeHistoryStore _historyStore;
   final Map<String, BridgeDeviceSnapshot> _devices =
       <String, BridgeDeviceSnapshot>{};
   final Map<String, int> _messageVersionCounters = <String, int>{};
@@ -55,10 +58,15 @@ class BridgeRepository {
   Stream<BridgeDeviceSnapshot> get deviceUpdates => _deviceController.stream;
   Stream<BridgeConnectionState> get connection => _connectionController.stream;
   Stream<List<BridgeCatalogItem>> get catalog => _catalogController.stream;
+  Stream<DeviceHistorySeries> watchHistory(String deviceId) =>
+      _historyStore.watchSeries(deviceId);
+  Future<DeviceHistorySeries> readHistory(String deviceId) =>
+      _historyStore.readSeries(deviceId);
 
   List<BridgeDeviceSnapshot> get currentFleet => _sortedFleet();
 
   Future<void> connect(String wsUrl) async {
+    await _historyStore.init();
     _connectionController.add(
       const BridgeConnectionState(
         status: BridgeConnectionStatus.connecting,
@@ -104,6 +112,7 @@ class BridgeRepository {
 
   Future<void> dispose() async {
     await disconnect();
+    await _historyStore.dispose();
     await _client.dispose();
     await _fleetController.close();
     await _deviceController.close();
@@ -251,6 +260,7 @@ class BridgeRepository {
       );
     }
     _devices[snapshot.deviceId] = snapshot;
+    unawaited(_historyStore.recordSnapshot(snapshot));
     _deviceController.add(snapshot);
     _fleetController.add(_sortedFleet());
   }
@@ -332,6 +342,7 @@ class BridgeRepository {
         updatedAt: updatedAt,
       );
       _devices[deviceId] = next;
+      unawaited(_historyStore.recordSnapshot(next));
       _deviceController.add(next);
       _fleetController.add(_sortedFleet());
     }

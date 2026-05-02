@@ -11,6 +11,47 @@ function normalizeKeys(input) {
     }
     return out;
 }
+function getNumber(out, keys) {
+    for (const key of keys) {
+        const value = out[key];
+        if (typeof value === 'number' && Number.isFinite(value))
+            return value;
+    }
+    return null;
+}
+function mapExtraBatteryMetrics(out) {
+    const rawNum = getNumber(out, ['num']);
+    if (rawNum === null)
+        return;
+    const batteryIndex = Math.round(rawNum);
+    if (!Number.isFinite(batteryIndex) || batteryIndex < 1 || batteryIndex > 8)
+        return;
+    const prefix = `pd.extraBattery${batteryIndex}`;
+    const soc = getNumber(out, ['soc']);
+    if (soc !== null)
+        out[`${prefix}.soc`] = soc;
+    const temp = getNumber(out, ['temp']);
+    if (temp !== null)
+        out[`${prefix}.temp`] = temp;
+    const maxCellTemp = getNumber(out, ['max_cell_temp', 'maxcelltemp']);
+    if (maxCellTemp !== null)
+        out[`${prefix}.maxCellTemp`] = maxCellTemp;
+    const minCellTemp = getNumber(out, ['min_cell_temp', 'mincelltemp']);
+    if (minCellTemp !== null)
+        out[`${prefix}.minCellTemp`] = minCellTemp;
+    const f32ShowSoc = getNumber(out, ['f32_show_soc', 'f32showsoc']);
+    if (f32ShowSoc !== null)
+        out[`${prefix}.f32ShowSoc`] = f32ShowSoc;
+    const inputWatts = getNumber(out, ['input_watts', 'inputwatts']);
+    if (inputWatts !== null)
+        out[`${prefix}.inputWatts`] = inputWatts;
+    const outputWatts = getNumber(out, ['output_watts', 'outputwatts']);
+    if (outputWatts !== null)
+        out[`${prefix}.outputWatts`] = outputWatts;
+    const cycles = getNumber(out, ['cycles']);
+    if (cycles !== null)
+        out[`${prefix}.cycles`] = cycles;
+}
 function routeByEnvelope(params, ctx) {
     const out = { ...params };
     if (!ctx.envelope)
@@ -23,6 +64,7 @@ function routeByEnvelope(params, ctx) {
             out['pd.accuChgEnergy'] = out.accu_chg_energy;
         if (out.accu_dsg_energy !== undefined)
             out['pd.accuDsgEnergy'] = out.accu_dsg_energy;
+        mapExtraBatteryMetrics(out);
     }
     if (ctx.envelope.cmdFunc === 254 && ctx.envelope.cmdId === 21) {
         if (out.pow_get_4p8_1 !== undefined)

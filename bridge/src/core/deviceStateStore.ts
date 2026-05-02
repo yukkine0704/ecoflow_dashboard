@@ -33,6 +33,26 @@ function sumValues(values: Record<string, number>): number | null {
 export class DeviceStateStore {
   private readonly devices = new Map<string, DeviceRecord>();
 
+  private isPlausibleNumericMetric(metricKey: string, value: number): boolean {
+    if (!Number.isFinite(value)) return false;
+    const key = metricKey.toLowerCase();
+
+    const isPowerLike = (
+      key.includes('watts')
+      || key.includes('powget')
+      || key.includes('inpower')
+      || key.includes('outpower')
+      || key.includes('powinsumw')
+      || key.includes('powoutsumw')
+    );
+    if (isPowerLike && Math.abs(value) > 100000) return false;
+
+    if (key.includes('soc') && (value < -1 || value > 1000)) return false;
+    if (key.includes('temp') && Math.abs(value) > 200) return false;
+
+    return true;
+  }
+
   private isBatteryJumpSuspicious(previous: number | null, next: number): boolean {
     if (previous === null) return false;
     return Math.abs(previous - next) > 20;
@@ -114,7 +134,10 @@ export class DeviceStateStore {
       // Delta 3/Gen3 solar fallback:
       // If only solar is active and total input is higher than reported solar
       // channels, complete missing solar power by inference.
-      const genericInput = Object.entries(components).find(([metricKey]) => metricKey.toLowerCase().endsWith('.inputwatts'));
+      const genericInput = (
+        Object.entries(components).find(([metricKey]) => metricKey.toLowerCase() === 'pd.inputwatts')
+        ?? Object.entries(components).find(([metricKey]) => metricKey.toLowerCase().endsWith('.inputwatts'))
+      );
       if (genericInput && Number.isFinite(genericInput[1]) && !hasOtherInputSources) {
         const totalInput = genericInput[1];
         const solarKeys = Object.keys(specificMap).filter((k) => k.toLowerCase().includes('powgetpv'));
@@ -232,6 +255,14 @@ export class DeviceStateStore {
     const now = new Date().toISOString();
     const record = this.getOrCreate(deviceId, now);
     const metricKey = `${channel}.${state}`;
+    const numeric = toNumber(rawPayload);
+    if (numeric !== null && !this.isPlausibleNumericMetric(metricKey, numeric)) {
+      return {
+        deviceId,
+        changed: {},
+        updatedAt: now,
+      };
+    }
     record.snapshot.metrics[metricKey] = rawPayload;
     record.snapshot.updatedAt = now;
     return {
@@ -300,6 +331,13 @@ export class DeviceStateStore {
     let normalizedValue: PrimitiveMetric = rawPayload;
     const numeric = toNumber(rawPayload);
     if (numeric !== null) {
+      if (!this.isPlausibleNumericMetric(metricKey, numeric)) {
+        return {
+          deviceId,
+          changed: {},
+          updatedAt: now,
+        };
+      }
       normalizedValue = numeric;
     }
 
