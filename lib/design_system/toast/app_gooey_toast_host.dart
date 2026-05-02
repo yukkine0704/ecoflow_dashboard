@@ -30,10 +30,26 @@ class AppGooeyToasterHost extends StatefulWidget {
   State<AppGooeyToasterHost> createState() => AppGooeyToasterHostState();
 }
 
+class _ToastLifetime {
+  _ToastLifetime({required this.remaining});
+
+  Duration remaining;
+  DateTime? startedAt;
+  Timer? timer;
+  bool dismissed = false;
+
+  void cancel() {
+    timer?.cancel();
+    timer = null;
+    startedAt = null;
+  }
+}
+
 class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     implements AppGooeyToastHostController {
   final List<AppToastData> _toasts = [];
-  final Map<String, Timer> _timers = {};
+  final Map<String, _ToastLifetime> _lifetimes = {};
+  final Set<String> _interactionPaused = <String>{};
 
   bool _expandedTop = false;
   bool _expandedBottom = false;
@@ -47,19 +63,21 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
   @override
   void dispose() {
     appGooeyToast.unbindHost(this);
-    for (final timer in _timers.values) {
-      timer.cancel();
+    for (final lifetime in _lifetimes.values) {
+      lifetime.cancel();
     }
     super.dispose();
   }
 
   @override
   void showToast(AppToastData toast) {
-    _timers[toast.id]?.cancel();
-    _scheduleDismiss(toast.id, toast.duration);
+    _lifetimes[toast.id]?.cancel();
+    _lifetimes[toast.id] = _ToastLifetime(remaining: toast.duration);
     setState(() {
       _toasts.insert(0, toast);
+      _syncExpanded();
     });
+    _evaluateTimerState(toast.id);
   }
 
   @override
@@ -75,6 +93,7 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     if (index < 0) {
       return;
     }
+
     final updated = _toasts[index].copyWith(
       title: title,
       type: type,
@@ -82,17 +101,29 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
       dismissible: dismissible,
       duration: duration,
     );
-    _timers[id]?.cancel();
-    _scheduleDismiss(id, updated.duration);
+
+    final life = _lifetimes[id];
+    if (duration != null) {
+      if (life != null) {
+        life.cancel();
+        life.remaining = duration;
+      } else {
+        _lifetimes[id] = _ToastLifetime(remaining: duration);
+      }
+    }
+
     setState(() {
       _toasts[index] = updated;
     });
+    _evaluateTimerState(id);
   }
 
   @override
   void dismissToast(String id) {
-    _timers[id]?.cancel();
-    _timers.remove(id);
+    _lifetimes[id]?.cancel();
+    _lifetimes.remove(id);
+    _interactionPaused.remove(id);
+
     setState(() {
       _toasts.removeWhere((t) => t.id == id);
       _syncExpanded();
@@ -101,10 +132,11 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
 
   @override
   void dismissAllToasts() {
-    for (final timer in _timers.values) {
-      timer.cancel();
+    for (final lifetime in _lifetimes.values) {
+      lifetime.cancel();
     }
-    _timers.clear();
+    _lifetimes.clear();
+    _interactionPaused.clear();
     setState(() {
       _toasts.clear();
       _expandedTop = false;
@@ -112,11 +144,102 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     });
   }
 
-  void _scheduleDismiss(String id, Duration duration) {
-    if (duration == Duration.zero || duration.inDays > 300) {
+  bool _isPersistent(Duration duration) {
+    return duration == Duration.zero || duration.inDays > 300;
+  }
+
+  bool _hasPauseReason(AppToastData toast) {
+    if (!toast.pauseOnInteraction) {
+      return false;
+    }
+    final expandedByPosition = toast.position == AppToastPosition.topCenter
+        ? _expandedTop
+        : _expandedBottom;
+    return expandedByPosition || _interactionPaused.contains(toast.id);
+  }
+
+  void _evaluateTimerState(String id) {
+    final toast = _toasts.cast<AppToastData?>().firstWhere(
+      (candidate) => candidate?.id == id,
+      orElse: () => null,
+    );
+    if (toast == null) {
       return;
     }
-    _timers[id] = Timer(duration, () => dismissToast(id));
+
+    final life = _lifetimes[id] ??= _ToastLifetime(remaining: toast.duration);
+    if (_isPersistent(toast.duration) || life.dismissed) {
+      life.cancel();
+      return;
+    }
+
+    if (_hasPauseReason(toast)) {
+      _pauseLifetime(id);
+      return;
+    }
+    _resumeLifetime(id);
+  }
+
+  void _pauseLifetime(String id) {
+    final life = _lifetimes[id];
+    if (life == null || life.startedAt == null) {
+      return;
+    }
+    final elapsed = DateTime.now().difference(life.startedAt!);
+    final remainingMs = math.max(0, life.remaining.inMilliseconds - elapsed.inMilliseconds);
+    life.remaining = Duration(milliseconds: remainingMs);
+    life.cancel();
+  }
+
+  void _resumeLifetime(String id) {
+    final life = _lifetimes[id];
+    final toast = _toasts.cast<AppToastData?>().firstWhere(
+      (candidate) => candidate?.id == id,
+      orElse: () => null,
+    );
+    if (life == null || toast == null) {
+      return;
+    }
+    if (_isPersistent(toast.duration)) {
+      life.cancel();
+      return;
+    }
+    if (life.startedAt != null || life.timer != null) {
+      return;
+    }
+    if (life.remaining <= Duration.zero) {
+      dismissToast(id);
+      return;
+    }
+
+    life.startedAt = DateTime.now();
+    life.timer = Timer(life.remaining, () {
+      life.dismissed = true;
+      dismissToast(id);
+    });
+  }
+
+  void _setExpandedForPosition(AppToastPosition position, bool expanded) {
+    setState(() {
+      if (position == AppToastPosition.topCenter) {
+        _expandedTop = expanded;
+      } else {
+        _expandedBottom = expanded;
+      }
+    });
+
+    for (final toast in _toasts.where((t) => t.position == position)) {
+      _evaluateTimerState(toast.id);
+    }
+  }
+
+  void _setInteractionPause(String id, bool isInteracting) {
+    if (isInteracting) {
+      _interactionPaused.add(id);
+    } else {
+      _interactionPaused.remove(id);
+    }
+    _evaluateTimerState(id);
   }
 
   void _syncExpanded() {
@@ -126,6 +249,7 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
     final bottomCount = _toasts
         .where((t) => t.position == AppToastPosition.bottomCenter)
         .length;
+
     if (topCount <= 1) {
       _expandedTop = false;
     }
@@ -156,10 +280,11 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
           verticalTop: true,
           onToggleExpanded: () {
             if (topToasts.length > 1) {
-              setState(() => _expandedTop = !_expandedTop);
+              _setExpandedForPosition(AppToastPosition.topCenter, !_expandedTop);
             }
           },
           onDismiss: dismissToast,
+          onInteractionChanged: _setInteractionPause,
         ),
         _ToastStack(
           toasts: bottomToasts,
@@ -171,10 +296,14 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
           verticalTop: false,
           onToggleExpanded: () {
             if (bottomToasts.length > 1) {
-              setState(() => _expandedBottom = !_expandedBottom);
+              _setExpandedForPosition(
+                AppToastPosition.bottomCenter,
+                !_expandedBottom,
+              );
             }
           },
           onDismiss: dismissToast,
+          onInteractionChanged: _setInteractionPause,
         ),
       ],
     );
@@ -192,6 +321,7 @@ class _ToastStack extends StatelessWidget {
     required this.verticalTop,
     required this.onToggleExpanded,
     required this.onDismiss,
+    required this.onInteractionChanged,
   });
 
   final List<AppToastData> toasts;
@@ -203,43 +333,68 @@ class _ToastStack extends StatelessWidget {
   final bool verticalTop;
   final VoidCallback onToggleExpanded;
   final ValueChanged<String> onDismiss;
+  final void Function(String id, bool isInteracting) onInteractionChanged;
 
   @override
   Widget build(BuildContext context) {
     if (toasts.isEmpty) {
       return const SizedBox.shrink();
     }
+
     final insets = MediaQuery.paddingOf(context);
     final edgeOffset = (verticalTop ? insets.top : insets.bottom) + offset;
+    final visibleCount = expanded ? toasts.length : math.min(toasts.length, visibleToasts);
 
     return Positioned(
       top: verticalTop ? edgeOffset : null,
       bottom: verticalTop ? null : edgeOffset,
-      left: 0,
-      right: 0,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onTap: onToggleExpanded,
-        child: Padding(
-          padding: EdgeInsets.symmetric(horizontal: horizontalInset),
-          child: SizedBox(
-            height: expanded ? (toasts.length * 108) + 32 : 124,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                for (int i = 0; i < toasts.length; i++)
-                  _StackedToastItem(
-                    toast: toasts[i],
-                    index: i,
-                    expanded: expanded,
-                    visibleToasts: visibleToasts,
-                    gap: gap,
-                    verticalTop: verticalTop,
-                    onDismiss: () => onDismiss(toasts[i].id),
+      left: horizontalInset,
+      right: horizontalInset,
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: AnimatedSize(
+          duration: const Duration(milliseconds: 240),
+          curve: Curves.easeOutCubic,
+          child: expanded
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (int i = 0; i < visibleCount; i++) ...[
+                      _StackedToastItem(
+                        toast: toasts[i],
+                        index: i,
+                        expanded: true,
+                        visibleToasts: visibleToasts,
+                        verticalTop: verticalTop,
+                        onDismiss: () => onDismiss(toasts[i].id),
+                        onTapLeader: i == 0 ? onToggleExpanded : null,
+                        onInteractionChanged: (value) =>
+                            onInteractionChanged(toasts[i].id, value),
+                      ),
+                      if (i != visibleCount - 1) SizedBox(height: gap),
+                    ],
+                  ],
+                )
+              : SizedBox(
+                  height: 96,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      for (int i = 0; i < visibleCount; i++)
+                        _StackedToastItem(
+                          toast: toasts[i],
+                          index: i,
+                          expanded: false,
+                          visibleToasts: visibleToasts,
+                          verticalTop: verticalTop,
+                          onDismiss: () => onDismiss(toasts[i].id),
+                          onTapLeader: i == 0 ? onToggleExpanded : null,
+                          onInteractionChanged: (value) =>
+                              onInteractionChanged(toasts[i].id, value),
+                        ),
+                    ],
                   ),
-              ],
-            ),
-          ),
+                ),
         ),
       ),
     );
@@ -252,53 +407,54 @@ class _StackedToastItem extends StatelessWidget {
     required this.index,
     required this.expanded,
     required this.visibleToasts,
-    required this.gap,
     required this.verticalTop,
     required this.onDismiss,
+    required this.onTapLeader,
+    required this.onInteractionChanged,
   });
 
   final AppToastData toast;
   final int index;
   final bool expanded;
   final int visibleToasts;
-  final double gap;
   final bool verticalTop;
   final VoidCallback onDismiss;
+  final VoidCallback? onTapLeader;
+  final ValueChanged<bool> onInteractionChanged;
 
   @override
   Widget build(BuildContext context) {
-    final hidden = !expanded && index >= visibleToasts;
-    if (hidden) {
-      return const SizedBox.shrink();
-    }
-
     final collapsedDepth = math.min(index, visibleToasts - 1);
     final collapsedOffset = collapsedDepth * 10.0;
-    final expandedOffset = index * (72 + gap);
-    final y = expanded ? expandedOffset : collapsedOffset;
-    final scale = expanded
-        ? 1.0
-        : (1 - (collapsedDepth * 0.04)).clamp(0.86, 1.0);
-    final opacity = expanded
-        ? 1.0
-        : (1 - (collapsedDepth * 0.2)).clamp(0.35, 1.0);
+    final scale = (1 - (collapsedDepth * 0.04)).clamp(0.86, 1.0);
+    final opacity = (1 - (collapsedDepth * 0.18)).clamp(0.35, 1.0);
 
-    return AnimatedPositioned(
-      duration: const Duration(milliseconds: 260),
-      curve: Curves.easeOutCubic,
-      top: verticalTop ? y : null,
-      bottom: verticalTop ? null : y,
+    final card = _GooeyToastCard(
+      toast: toast,
+      expanded: expanded,
+      onDismiss: onDismiss,
+      onTapLeader: onTapLeader,
+      onInteractionChanged: onInteractionChanged,
+    );
+
+    if (expanded) {
+      return card;
+    }
+
+    return Positioned(
+      top: verticalTop ? collapsedOffset : null,
+      bottom: verticalTop ? null : collapsedOffset,
       left: 0,
       right: 0,
       child: AnimatedScale(
         duration: const Duration(milliseconds: 220),
         scale: scale,
+        alignment: Alignment.topCenter,
         child: Opacity(
           opacity: opacity,
-          child: _GooeyToastCard(
-            toast: toast,
-            expanded: expanded,
-            onDismiss: onDismiss,
+          child: IgnorePointer(
+            ignoring: index != 0,
+            child: card,
           ),
         ),
       ),
@@ -311,11 +467,15 @@ class _GooeyToastCard extends StatefulWidget {
     required this.toast,
     required this.expanded,
     required this.onDismiss,
+    required this.onTapLeader,
+    required this.onInteractionChanged,
   });
 
   final AppToastData toast;
   final bool expanded;
   final VoidCallback onDismiss;
+  final VoidCallback? onTapLeader;
+  final ValueChanged<bool> onInteractionChanged;
 
   @override
   State<_GooeyToastCard> createState() => _GooeyToastCardState();
@@ -325,199 +485,129 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
   double _dragX = 0;
 
   @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final palette = _palette(colors, widget.toast.type);
+    final palette = _palette(colors, widget.toast.type, Theme.of(context).brightness);
     final hasBody =
         (widget.toast.description?.isNotEmpty ?? false) ||
-        widget.toast.action != null;
+        widget.toast.action != null ||
+        widget.toast.meta != null;
     final showExpandedBody = widget.expanded && hasBody;
     final morph = showExpandedBody ? 1.0 : 0.0;
-    final height = showExpandedBody ? 116.0 : 64.0;
 
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
-      transform: Matrix4.identity()..translate(_dragX, 0.0),
+      transform: Matrix4.identity()..translateByDouble(_dragX, 0.0, 0.0, 1.0),
       child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTapLeader,
+        onHorizontalDragStart: (_) => widget.onInteractionChanged(true),
         onHorizontalDragUpdate: (details) =>
             setState(() => _dragX += details.delta.dx),
         onHorizontalDragEnd: (_) {
-          if (_dragX.abs() > 46 && widget.toast.dismissible) {
+          final width = context.size?.width ?? 320;
+          final threshold = math.max(52.0, width * 0.22);
+          if (_dragX.abs() > threshold && widget.toast.dismissible) {
             widget.onDismiss();
           } else {
             setState(() => _dragX = 0);
           }
+          widget.onInteractionChanged(false);
         },
-        child: Stack(
-          children: [
-            CustomPaint(
-              painter: _GooeySurfacePainter(
-                color: palette.surface,
-                stroke: palette.stroke,
-                morph: morph,
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(26),
-                child: SizedBox(
-                  height: height,
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final compact = constraints.maxHeight < 58;
-                      if (compact) {
-                        return Align(
-                          alignment: Alignment.centerLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            child: Row(
-                              children: [
-                                _TypeDot(
-                                  type: widget.toast.type,
-                                  color: palette.icon,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Text(
-                                    widget.toast.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                          color: palette.text,
-                                          fontWeight: FontWeight.w700,
-                                        ),
+        onHorizontalDragCancel: () {
+          setState(() => _dragX = 0);
+          widget.onInteractionChanged(false);
+        },
+        child: CustomPaint(
+          painter: _GooeySurfacePainter(
+            color: palette.surface,
+            stroke: palette.stroke,
+            morph: morph,
+            isDark: Theme.of(context).brightness == Brightness.dark,
+            glow: palette.glow,
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(26),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      _TypeDot(type: widget.toast.type, color: palette.icon),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Text(
+                          widget.toast.title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                color: palette.text,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                      if (widget.toast.showTimestamp)
+                        Padding(
+                          padding: const EdgeInsets.only(left: AppSpacing.sm),
+                          child: Text(
+                            _formatTimestamp(widget.toast.createdAt),
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(color: palette.meta),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (showExpandedBody) ...[
+                    const SizedBox(height: AppSpacing.sm),
+                    _ToastBody(
+                      toast: widget.toast,
+                      metaColor: palette.meta,
+                    ),
+                    if (widget.toast.action != null) ...[
+                      const SizedBox(height: AppSpacing.sm),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: GestureDetector(
+                          onTapDown: (_) => widget.onInteractionChanged(true),
+                          onTapCancel: () => widget.onInteractionChanged(false),
+                          onTap: () {
+                            widget.toast.action?.onPressed();
+                            widget.onInteractionChanged(false);
+                            if (widget.toast.dismissible) {
+                              widget.onDismiss();
+                            }
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.md,
+                              vertical: AppSpacing.sm,
+                            ),
+                            decoration: BoxDecoration(
+                              color: palette.actionBg,
+                              borderRadius: AppRadius.full,
+                            ),
+                            child: Text(
+                              widget.toast.action!.label,
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: palette.actionText,
+                                    fontWeight: FontWeight.w800,
                                   ),
-                                ),
-                              ],
                             ),
                           ),
-                        );
-                      }
-
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
                         ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                _TypeDot(
-                                  type: widget.toast.type,
-                                  color: palette.icon,
-                                ),
-                                const SizedBox(width: AppSpacing.sm),
-                                Expanded(
-                                  child: Text(
-                                    widget.toast.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .bodyMedium
-                                        ?.copyWith(
-                                          color: palette.text,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                  ),
-                                ),
-                                if (widget.toast.showTimestamp)
-                                  Text(
-                                    _formatTimestamp(widget.toast.createdAt),
-                                    style: Theme.of(context)
-                                        .textTheme
-                                        .labelSmall
-                                        ?.copyWith(color: palette.meta),
-                                  ),
-                              ],
-                            ),
-                            if (showExpandedBody) ...[
-                              const SizedBox(height: AppSpacing.sm),
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      widget.toast.description ?? '',
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(color: palette.meta),
-                                    ),
-                                  ),
-                                  if (widget.toast.meta != null) ...[
-                                    const SizedBox(width: AppSpacing.sm),
-                                    Text(
-                                      widget.toast.meta!,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelSmall
-                                          ?.copyWith(color: palette.meta),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              if (widget.toast.action != null) ...[
-                                const SizedBox(height: AppSpacing.sm),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      widget.toast.action?.onPressed();
-                                      if (widget.toast.dismissible) {
-                                        widget.onDismiss();
-                                      }
-                                    },
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: AppSpacing.md,
-                                        vertical: AppSpacing.sm,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: palette.actionBg,
-                                        borderRadius: AppRadius.full,
-                                      ),
-                                      child: Text(
-                                        widget.toast.action!.label,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .labelSmall
-                                            ?.copyWith(
-                                              color: palette.actionText,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+                    ],
+                  ],
+                ],
               ),
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -527,6 +617,98 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
     final hour = dt.hour.toString().padLeft(2, '0');
     final minute = dt.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+}
+
+class _ToastBody extends StatelessWidget {
+  const _ToastBody({required this.toast, required this.metaColor});
+
+  final AppToastData toast;
+  final Color metaColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final description = toast.description ?? '';
+    final hasMeta = toast.meta?.isNotEmpty ?? false;
+
+    switch (toast.bodyLayout) {
+      case AppToastBodyLayout.left:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (description.isNotEmpty)
+              Text(
+                description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: metaColor),
+              ),
+            if (hasMeta) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                toast.meta!,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: metaColor),
+              ),
+            ],
+          ],
+        );
+      case AppToastBodyLayout.center:
+        return Center(
+          child: Text(
+            hasMeta ? '$description  ${toast.meta!}' : description,
+            textAlign: TextAlign.center,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style:
+                Theme.of(context).textTheme.bodyMedium?.copyWith(color: metaColor),
+          ),
+        );
+      case AppToastBodyLayout.right:
+        return Align(
+          alignment: Alignment.centerRight,
+          child: Text(
+            hasMeta ? '$description  ${toast.meta!}' : description,
+            textAlign: TextAlign.right,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style:
+                Theme.of(context).textTheme.bodyMedium?.copyWith(color: metaColor),
+          ),
+        );
+      case AppToastBodyLayout.spread:
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context)
+                    .textTheme
+                    .bodyMedium
+                    ?.copyWith(color: metaColor),
+              ),
+            ),
+            if (hasMeta) ...[
+              const SizedBox(width: AppSpacing.sm),
+              Text(
+                toast.meta!,
+                style: Theme.of(context)
+                    .textTheme
+                    .labelSmall
+                    ?.copyWith(color: metaColor),
+              ),
+            ],
+          ],
+        );
+    }
   }
 }
 
@@ -566,10 +748,9 @@ class _GooeyPalette {
     required this.text,
     required this.meta,
     required this.icon,
-    required this.progress,
-    required this.track,
     required this.actionBg,
     required this.actionText,
+    required this.glow,
   });
 
   final Color surface;
@@ -577,85 +758,92 @@ class _GooeyPalette {
   final Color text;
   final Color meta;
   final Color icon;
-  final Color progress;
-  final Color track;
   final Color actionBg;
   final Color actionText;
+  final Color glow;
 }
 
-_GooeyPalette _palette(AppColors colors, AppToastType type) {
+_GooeyPalette _palette(AppColors colors, AppToastType type, Brightness brightness) {
+  final dark = brightness == Brightness.dark;
+
   switch (type) {
     case AppToastType.success:
       return _GooeyPalette(
-        surface: colors.secondaryContainer.withValues(alpha: 0.35),
-        stroke: colors.secondary.withValues(alpha: 0.4),
+        surface: dark
+            ? const Color(0xFF111414).withValues(alpha: 0.88)
+            : const Color(0xFFF3EEE1).withValues(alpha: 0.95),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
-        icon: colors.secondary,
-        progress: colors.secondary,
-        track: colors.surfaceHighest,
-        actionBg: colors.secondary,
-        actionText: colors.surface,
+        icon: const Color(0xFF87D5BD),
+        actionBg: const Color(0xFF87D5BD),
+        actionText: dark ? const Color(0xFF0D0F0F) : const Color(0xFF353328),
+        glow: const Color(0xFF87D5BD).withValues(alpha: 0.18),
       );
     case AppToastType.error:
       return _GooeyPalette(
-        surface: colors.error.withValues(alpha: 0.24),
-        stroke: colors.error.withValues(alpha: 0.4),
+        surface: dark
+            ? const Color(0xFF171A1A).withValues(alpha: 0.9)
+            : const Color(0xFFF3EEE1).withValues(alpha: 0.97),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
         icon: colors.error,
-        progress: colors.error,
-        track: colors.surfaceHighest,
         actionBg: colors.error,
         actionText: colors.surface,
+        glow: colors.error.withValues(alpha: 0.14),
       );
     case AppToastType.warning:
       return _GooeyPalette(
-        surface: colors.tertiaryContainer.withValues(alpha: 0.34),
-        stroke: colors.tertiary.withValues(alpha: 0.4),
+        surface: dark
+            ? const Color(0xFF171A1A).withValues(alpha: 0.9)
+            : const Color(0xFFF8F3E8).withValues(alpha: 0.96),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
-        icon: colors.tertiary,
-        progress: colors.tertiary,
-        track: colors.surfaceHighest,
-        actionBg: colors.tertiary,
-        actionText: colors.surface,
+        icon: const Color(0xFFFFE9B0),
+        actionBg: const Color(0xFFFFE9B0),
+        actionText: dark ? const Color(0xFF0D0F0F) : const Color(0xFF353328),
+        glow: const Color(0xFFFFE9B0).withValues(alpha: 0.14),
       );
     case AppToastType.info:
       return _GooeyPalette(
-        surface: colors.primaryContainer.withValues(alpha: 0.3),
-        stroke: colors.primary.withValues(alpha: 0.4),
+        surface: dark
+            ? const Color(0xFF171A1A).withValues(alpha: 0.88)
+            : const Color(0xFFF3EEE1).withValues(alpha: 0.95),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
-        icon: colors.primary,
-        progress: colors.primary,
-        track: colors.surfaceHighest,
-        actionBg: colors.primary,
-        actionText: colors.surface,
+        icon: const Color(0xFFFFAA85),
+        actionBg: const Color(0xFFFFAA85),
+        actionText: dark ? const Color(0xFF0D0F0F) : const Color(0xFF353328),
+        glow: const Color(0xFFFFAA85).withValues(alpha: 0.14),
       );
     case AppToastType.loading:
       return _GooeyPalette(
-        surface: colors.surfaceLow.withValues(alpha: 0.66),
-        stroke: colors.outlineVariant.withValues(alpha: 0.4),
+        surface: dark
+            ? const Color(0xFF171A1A).withValues(alpha: 0.84)
+            : const Color(0xFFF8F3E8).withValues(alpha: 0.95),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
         icon: colors.onSurface,
-        progress: colors.primary,
-        track: colors.surfaceHighest,
         actionBg: colors.surfaceHighest,
         actionText: colors.onSurface,
+        glow: const Color(0xFFFFAA85).withValues(alpha: 0.12),
       );
     case AppToastType.normal:
       return _GooeyPalette(
-        surface: colors.surfaceLow.withValues(alpha: 0.7),
-        stroke: colors.outlineVariant.withValues(alpha: 0.35),
+        surface: dark
+            ? const Color(0xFF171A1A).withValues(alpha: 0.86)
+            : const Color(0xFFF3EEE1).withValues(alpha: 0.95),
+        stroke: Colors.transparent,
         text: colors.onSurface,
         meta: colors.onSurfaceVariant,
         icon: colors.onSurface,
-        progress: colors.primary,
-        track: colors.surfaceHighest,
-        actionBg: colors.primaryContainer,
-        actionText: colors.onPrimaryContainer,
+        actionBg: dark ? const Color(0xFF232626) : const Color(0xFFEDE8DA),
+        actionText: colors.onSurface,
+        glow: const Color(0xFFFFAA85).withValues(alpha: 0.1),
       );
   }
 }
@@ -665,11 +853,15 @@ class _GooeySurfacePainter extends CustomPainter {
     required this.color,
     required this.stroke,
     required this.morph,
+    required this.isDark,
+    required this.glow,
   });
 
   final Color color;
   final Color stroke;
   final double morph;
+  final bool isDark;
+  final Color glow;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -699,15 +891,24 @@ class _GooeySurfacePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
-    canvas.drawShadow(path, Colors.black.withValues(alpha: 0.1), 12, false);
+    canvas.drawShadow(
+      path,
+      glow,
+      isDark ? 18 : 12,
+      false,
+    );
     canvas.drawPath(path, fillPaint);
-    canvas.drawPath(path, strokePaint);
+    if (stroke.a > 0) {
+      canvas.drawPath(path, strokePaint);
+    }
   }
 
   @override
   bool shouldRepaint(covariant _GooeySurfacePainter other) {
     return color != other.color ||
         stroke != other.stroke ||
-        morph != other.morph;
+        morph != other.morph ||
+        isDark != other.isDark ||
+        glow != other.glow;
   }
 }

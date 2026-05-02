@@ -22,6 +22,7 @@ class AppToastConfig {
     this.duration = const Duration(milliseconds: 5000),
     this.position = AppToastPosition.topCenter,
     this.dismissible = true,
+    this.pauseOnInteraction = true,
     this.showTimestamp = false,
     this.meta,
     this.action,
@@ -32,6 +33,7 @@ class AppToastConfig {
   final Duration duration;
   final AppToastPosition position;
   final bool dismissible;
+  final bool pauseOnInteraction;
   final bool showTimestamp;
   final String? meta;
   final AppToastAction? action;
@@ -48,6 +50,7 @@ class AppToastData {
     required this.duration,
     required this.position,
     required this.dismissible,
+    required this.pauseOnInteraction,
     required this.showTimestamp,
     required this.meta,
     required this.action,
@@ -62,6 +65,7 @@ class AppToastData {
   final Duration duration;
   final AppToastPosition position;
   final bool dismissible;
+  final bool pauseOnInteraction;
   final bool showTimestamp;
   final String? meta;
   final AppToastAction? action;
@@ -74,6 +78,7 @@ class AppToastData {
     Duration? duration,
     AppToastPosition? position,
     bool? dismissible,
+    bool? pauseOnInteraction,
     bool? showTimestamp,
     String? meta,
     AppToastAction? action,
@@ -88,6 +93,7 @@ class AppToastData {
       duration: duration ?? this.duration,
       position: position ?? this.position,
       dismissible: dismissible ?? this.dismissible,
+      pauseOnInteraction: pauseOnInteraction ?? this.pauseOnInteraction,
       showTimestamp: showTimestamp ?? this.showTimestamp,
       meta: meta ?? this.meta,
       action: action ?? this.action,
