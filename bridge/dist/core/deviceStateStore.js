@@ -16,6 +16,9 @@ function sumValues(values) {
     }
     return items.reduce((acc, value) => acc + value, 0);
 }
+function fahrenheitToCelsius(value) {
+    return (value - 32) * (5 / 9);
+}
 export class DeviceStateStore {
     devices = new Map();
     isPlausibleNumericMetric(metricKey, value) {
@@ -75,6 +78,35 @@ export class DeviceStateStore {
         if (key.includes('env'))
             return 60;
         return 50;
+    }
+    getMetricNumber(metrics, key) {
+        return toNumber(metrics[key] ?? null);
+    }
+    reconcileBatteryTemperatureUnit(record, metricKey, tempCOrF) {
+        const key = metricKey.toLowerCase();
+        const isBmsTemp = key === 'bms.temp';
+        const isMaxCellTemp = key.endsWith('.maxcelltemp') || key.endsWith('.bmsmaxcelltemp');
+        if (!isBmsTemp && !isMaxCellTemp) {
+            return tempCOrF;
+        }
+        const counterpart = isBmsTemp
+            ? (this.getMetricNumber(record.snapshot.metrics, 'battery.maxCellTempC')
+                ?? this.getMetricNumber(record.snapshot.metrics, 'bms.maxCellTemp')
+                ?? this.getMetricNumber(record.snapshot.metrics, 'pd.bmsMaxCellTemp'))
+            : this.getMetricNumber(record.snapshot.metrics, 'bms.temp');
+        if (counterpart === null) {
+            return tempCOrF;
+        }
+        const directDiff = Math.abs(tempCOrF - counterpart);
+        if (directDiff <= 10) {
+            return tempCOrF;
+        }
+        const converted = fahrenheitToCelsius(tempCOrF);
+        const convertedDiff = Math.abs(converted - counterpart);
+        if (convertedDiff + 1e-6 < directDiff && convertedDiff <= 10) {
+            return converted;
+        }
+        return tempCOrF;
     }
     detectInputType(metricKey) {
         const key = metricKey.toLowerCase().replace(/[._-]/g, '');
@@ -336,7 +368,16 @@ export class DeviceStateStore {
                     break;
                 }
                 case 'temperatureC': {
-                    const temp = toNumber(normalizedValue);
+                    let temp = toNumber(normalizedValue);
+                    if (temp !== null) {
+                        const reconciledTemp = this.reconcileBatteryTemperatureUnit(record, metricKey, temp);
+                        if (reconciledTemp !== temp) {
+                            temp = reconciledTemp;
+                            normalizedValue = reconciledTemp;
+                            record.snapshot.metrics[metricKey] = reconciledTemp;
+                            changed[`metrics.${metricKey}`] = reconciledTemp;
+                        }
+                    }
                     if (temp !== null) {
                         const sourceScore = this.temperatureSourceScore(metricKey);
                         const scoreOk = sourceScore >= record.temperatureSourceScore || record.snapshot.temperatureC === null;

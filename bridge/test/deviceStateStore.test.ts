@@ -138,3 +138,29 @@ test('connectivity is exposed in snapshot and fleet payload', () => {
   const fleet = store.getFleetState();
   assert.equal(fleet.devices[0]?.connectivity, 'assume_offline');
 });
+
+test('auto-converts bms.temp from Fahrenheit when it mismatches maxCellTemp by >10C', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'R651ZAB5XH111262';
+
+  store.upsertMetric(deviceId, 'bms', 'maxCellTemp', 33);
+  store.upsertMetric(deviceId, 'bms', 'temp', 104);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.equal(snapshot.metrics['battery.maxCellTempC'], 33);
+  assert.ok(Math.abs((snapshot.metrics['bms.temp'] as number) - 40) < 0.001);
+  assert.ok(Math.abs((snapshot.temperatureC as number) - 40) < 0.001);
+});
+
+test('auto-converts maxCellTemp from Fahrenheit when bms.temp is already Celsius', () => {
+  const store = new DeviceStateStore();
+  const deviceId = 'R651ZAB5XH111262';
+
+  store.upsertMetric(deviceId, 'bms', 'temp', 39);
+  store.upsertMetric(deviceId, 'bms', 'maxCellTemp', 104);
+
+  const snapshot = store.getSnapshot(deviceId);
+  assert.ok(snapshot);
+  assert.ok(Math.abs((snapshot.metrics['battery.maxCellTempC'] as number) - 40) < 0.001);
+});
