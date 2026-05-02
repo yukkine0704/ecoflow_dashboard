@@ -25,12 +25,18 @@ class DeviceSelectionCard extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     final isMobile = MediaQuery.sizeOf(context).width < 700;
     final battery = device.batteryPercent;
-    final online = device.online;
+    final connectivity = device.connectivity;
     final batteryValue = battery == null ? 0.0 : battery.clamp(0, 100) / 100.0;
-    final statusLabel = online == null ? 'Unknown' : (online ? 'Online' : 'Offline');
-    final statusTone = online == null
-        ? AppStatusTone.neutral
-        : (online ? AppStatusTone.active : AppStatusTone.warning);
+    final statusLabel = switch (connectivity) {
+      BridgeConnectivity.online => 'Online',
+      BridgeConnectivity.assumeOffline => 'Assume offline',
+      BridgeConnectivity.offline => 'Offline',
+    };
+    final statusTone = switch (connectivity) {
+      BridgeConnectivity.online => AppStatusTone.active,
+      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
+      BridgeConnectivity.offline => AppStatusTone.danger,
+    };
     final estimateLabel = _estimateLabel(device, battery);
     final localAssetImagePath = _deviceImageAssetsById[device.deviceId];
 
@@ -177,7 +183,7 @@ class DeviceSelectionCard extends StatelessWidget {
   }
 
   String _estimateLabel(BridgeDeviceSnapshot device, int? battery) {
-    if (device.online == false) {
+    if (device.connectivity == BridgeConnectivity.offline) {
       return 'Disconnected';
     }
     if (battery == null) {

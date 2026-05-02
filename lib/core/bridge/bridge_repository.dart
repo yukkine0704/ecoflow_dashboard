@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 
 import 'bridge_models.dart';
 import 'bridge_ws_client.dart';
@@ -34,6 +35,7 @@ class BridgeRepository {
   final BridgeWsClient _client;
   final Map<String, BridgeDeviceSnapshot> _devices =
       <String, BridgeDeviceSnapshot>{};
+  final Map<String, int> _messageVersionCounters = <String, int>{};
 
   StreamSubscription<Map<String, dynamic>>? _messagesSub;
   StreamSubscription<Object>? _errorsSub;
@@ -111,6 +113,7 @@ class BridgeRepository {
 
   void _onMessage(Map<String, dynamic> rawEnvelope) {
     final envelope = BridgeEventEnvelope.fromJson(rawEnvelope);
+    _trackEnvelopeVersion(envelope.version);
     switch (envelope.type) {
       case BridgeEventType.fleetState:
         _handleFleetState(envelope.payload);
@@ -190,7 +193,8 @@ class BridgeRepository {
           displayName: nextDisplayName,
           model: nextModel,
           imageUrl: null,
-          online: fleetItem.online,
+          connectivity: fleetItem.connectivity,
+          onlineLegacy: fleetItem.onlineLegacy,
           batteryPercent: nextBattery,
           temperatureC: null,
           totalInputW: null,
@@ -199,10 +203,17 @@ class BridgeRepository {
           updatedAt: fleetItem.updatedAt,
         );
       } else {
+        _logConnectivityTransitionIfNeeded(
+          fleetItem.deviceId,
+          current.connectivity,
+          fleetItem.connectivity,
+          'fleet_state',
+        );
         _devices[fleetItem.deviceId] = current.copyWith(
           displayName: nextDisplayName,
           model: nextModel,
-          online: fleetItem.online,
+          connectivity: fleetItem.connectivity,
+          onlineLegacy: fleetItem.onlineLegacy,
           batteryPercent: nextBattery,
           updatedAt: fleetItem.updatedAt,
         );
@@ -230,6 +241,15 @@ class BridgeRepository {
         ),
       ),
     );
+    final previous = _devices[snapshot.deviceId];
+    if (previous != null) {
+      _logConnectivityTransitionIfNeeded(
+        snapshot.deviceId,
+        previous.connectivity,
+        snapshot.connectivity,
+        'device_snapshot',
+      );
+    }
     _devices[snapshot.deviceId] = snapshot;
     _deviceController.add(snapshot);
     _fleetController.add(_sortedFleet());
@@ -249,7 +269,8 @@ class BridgeRepository {
     if (changed is Map) {
       final nextMetrics = Map<String, dynamic>.from(current.metrics);
       int? battery = current.batteryPercent;
-      bool? online = current.online;
+      bool? onlineLegacy = current.onlineLegacy;
+      BridgeConnectivity? connectivity;
       double? temperature = current.temperatureC;
       double? totalIn = current.totalInputW;
       double? totalOut = current.totalOutputW;
@@ -262,9 +283,9 @@ class BridgeRepository {
               ? value.round()
               : int.tryParse(value.toString());
         } else if (key == 'online') {
-          if (value is bool) {
-            online = value;
-          }
+          onlineLegacy = _asBool(value);
+        } else if (key == 'connectivity') {
+          connectivity = BridgeConnectivityX.fromWire(value);
         } else if (key == 'temperatureC') {
           temperature = value is num
               ? value.toDouble()
@@ -288,13 +309,22 @@ class BridgeRepository {
         rawBatteryPercent: battery,
         metrics: nextMetrics,
       );
+      final resolvedConnectivity =
+          connectivity ?? BridgeConnectivityX.fromLegacyOnline(onlineLegacy);
 
       final updatedAt =
           DateTime.tryParse((payload['updatedAt'] ?? '').toString()) ??
           DateTime.now();
+      _logConnectivityTransitionIfNeeded(
+        deviceId,
+        current.connectivity,
+        resolvedConnectivity,
+        'device_delta',
+      );
       final next = current.copyWith(
         batteryPercent: battery,
-        online: online,
+        connectivity: resolvedConnectivity,
+        onlineLegacy: onlineLegacy,
         temperatureC: temperature,
         totalInputW: totalIn,
         totalOutputW: totalOut,
@@ -305,6 +335,28 @@ class BridgeRepository {
       _deviceController.add(next);
       _fleetController.add(_sortedFleet());
     }
+  }
+
+  void _trackEnvelopeVersion(String version) {
+    final nextCount = (_messageVersionCounters[version] ?? 0) + 1;
+    _messageVersionCounters[version] = nextCount;
+    if (nextCount == 1 || nextCount % 100 == 0) {
+      debugPrint('[BridgeRepository] ws version=$version count=$nextCount');
+    }
+  }
+
+  void _logConnectivityTransitionIfNeeded(
+    String deviceId,
+    BridgeConnectivity previous,
+    BridgeConnectivity next,
+    String source,
+  ) {
+    if (previous == next) {
+      return;
+    }
+    debugPrint(
+      '[BridgeRepository] connectivity device=$deviceId $previous -> $next source=$source',
+    );
   }
 
   List<BridgeDeviceSnapshot> _sortedFleet() {
@@ -380,6 +432,27 @@ class BridgeRepository {
     }
     if (value is String) {
       return int.tryParse(value) ?? double.tryParse(value)?.round();
+    }
+    return null;
+  }
+
+  bool? _asBool(Object? value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true' ||
+          normalized == 'online' ||
+          normalized == 'on' ||
+          normalized == '1') {
+        return true;
+      }
+      if (normalized == 'false' ||
+          normalized == 'offline' ||
+          normalized == 'off' ||
+          normalized == '0') {
+        return false;
+      }
     }
     return null;
   }

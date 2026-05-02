@@ -1,10 +1,31 @@
+enum BridgeConnectivity { online, assumeOffline, offline }
+
+extension BridgeConnectivityX on BridgeConnectivity {
+  static BridgeConnectivity fromWire(Object? raw) {
+    if (raw is String) {
+      final normalized = raw.trim().toLowerCase();
+      if (normalized == 'online') return BridgeConnectivity.online;
+      if (normalized == 'assume_offline') return BridgeConnectivity.assumeOffline;
+      if (normalized == 'offline') return BridgeConnectivity.offline;
+    }
+    return BridgeConnectivity.assumeOffline;
+  }
+
+  static BridgeConnectivity fromLegacyOnline(bool? online) {
+    if (online == true) return BridgeConnectivity.online;
+    if (online == false) return BridgeConnectivity.offline;
+    return BridgeConnectivity.assumeOffline;
+  }
+}
+
 class BridgeDeviceSnapshot {
   const BridgeDeviceSnapshot({
     required this.deviceId,
     required this.displayName,
     required this.model,
     required this.imageUrl,
-    required this.online,
+    required this.connectivity,
+    required this.onlineLegacy,
     required this.batteryPercent,
     required this.temperatureC,
     required this.totalInputW,
@@ -17,7 +38,8 @@ class BridgeDeviceSnapshot {
   final String displayName;
   final String? model;
   final String? imageUrl;
-  final bool? online;
+  final BridgeConnectivity connectivity;
+  final bool? onlineLegacy;
   final int? batteryPercent;
   final double? temperatureC;
   final double? totalInputW;
@@ -25,14 +47,22 @@ class BridgeDeviceSnapshot {
   final Map<String, dynamic> metrics;
   final DateTime updatedAt;
 
+  @Deprecated('Use connectivity instead. This will be removed when v1 is retired.')
+  bool? get online => onlineLegacy;
+
   factory BridgeDeviceSnapshot.fromJson(Map<String, dynamic> json) {
+    final onlineLegacy = _asBool(json['online']);
+    final parsedConnectivity = json.containsKey('connectivity')
+        ? BridgeConnectivityX.fromWire(json['connectivity'])
+        : BridgeConnectivityX.fromLegacyOnline(onlineLegacy);
     return BridgeDeviceSnapshot(
       deviceId: (json['deviceId'] ?? '').toString(),
       displayName: (json['displayName'] ?? json['deviceId'] ?? 'Unknown')
           .toString(),
       model: _asString(json['model']),
       imageUrl: _asString(json['imageUrl']),
-      online: _asBool(json['online']),
+      connectivity: parsedConnectivity,
+      onlineLegacy: onlineLegacy,
       batteryPercent: _asInt(json['batteryPercent']),
       temperatureC: _asDouble(json['temperatureC']),
       totalInputW: _asDouble(json['totalInputW']),
@@ -47,7 +77,8 @@ class BridgeDeviceSnapshot {
     String? displayName,
     String? model,
     String? imageUrl,
-    bool? online,
+    BridgeConnectivity? connectivity,
+    bool? onlineLegacy,
     int? batteryPercent,
     double? temperatureC,
     double? totalInputW,
@@ -60,7 +91,8 @@ class BridgeDeviceSnapshot {
       displayName: displayName ?? this.displayName,
       model: model ?? this.model,
       imageUrl: imageUrl ?? this.imageUrl,
-      online: online ?? this.online,
+      connectivity: connectivity ?? this.connectivity,
+      onlineLegacy: onlineLegacy ?? this.onlineLegacy,
       batteryPercent: batteryPercent ?? this.batteryPercent,
       temperatureC: temperatureC ?? this.temperatureC,
       totalInputW: totalInputW ?? this.totalInputW,
@@ -132,7 +164,8 @@ class BridgeFleetItem {
     required this.deviceId,
     required this.displayName,
     required this.model,
-    required this.online,
+    required this.connectivity,
+    required this.onlineLegacy,
     required this.batteryPercent,
     required this.updatedAt,
   });
@@ -140,17 +173,23 @@ class BridgeFleetItem {
   final String deviceId;
   final String displayName;
   final String? model;
-  final bool? online;
+  final BridgeConnectivity connectivity;
+  final bool? onlineLegacy;
   final int? batteryPercent;
   final DateTime updatedAt;
 
   factory BridgeFleetItem.fromJson(Map<String, dynamic> json) {
+    final onlineLegacy = BridgeDeviceSnapshot._asBool(json['online']);
+    final parsedConnectivity = json.containsKey('connectivity')
+        ? BridgeConnectivityX.fromWire(json['connectivity'])
+        : BridgeConnectivityX.fromLegacyOnline(onlineLegacy);
     return BridgeFleetItem(
       deviceId: (json['deviceId'] ?? '').toString(),
       displayName: (json['displayName'] ?? json['deviceId'] ?? 'Unknown')
           .toString(),
       model: BridgeDeviceSnapshot._asString(json['model']),
-      online: BridgeDeviceSnapshot._asBool(json['online']),
+      connectivity: parsedConnectivity,
+      onlineLegacy: onlineLegacy,
       batteryPercent: BridgeDeviceSnapshot._asInt(json['batteryPercent']),
       updatedAt:
           BridgeDeviceSnapshot._asDateTime(json['updatedAt']) ?? DateTime.now(),

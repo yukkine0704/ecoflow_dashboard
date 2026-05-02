@@ -84,6 +84,28 @@ function extractSnFromTopic(topic: string, userId: string): string | null {
   return null;
 }
 
+function isPresenceTopic(topic: string): boolean {
+  return topic.startsWith('/app/device/property/')
+    || topic.endsWith('/thing/property/get_reply')
+    || topic.endsWith('/thing/property/set_reply');
+}
+
+function isBenignUnknownFrame(
+  topic: string,
+  payloadHex: string,
+  parsed: { debug: { mode: string } },
+): boolean {
+  // Common short reply frame seen on get_reply without telemetry payload.
+  if (topic.endsWith('/thing/property/get_reply') && payloadHex === '0a05b201022d32') {
+    return true;
+  }
+  // Runtime property encrypted frames can arrive partially/with unsupported map variants.
+  if (parsed.debug.mode.startsWith('encrypted-unknown(cmdFunc=254,cmdId=22')) {
+    return true;
+  }
+  return false;
+}
+
 export class MqttIngestService {
   private client: MqttClient | null = null;
   private commandTimer: NodeJS.Timeout | null = null;
@@ -145,21 +167,38 @@ export class MqttIngestService {
         return;
       }
 
+      // Treat known device topics as liveness signals even when payload parsing fails.
+      if (isPresenceTopic(topic)) {
+        this.statusTracker.onDataReceived(sn);
+      }
+
       const parsed = parseEcoflowPayload(payloadBuffer);
       const model = this.deviceModels.get(sn) ?? null;
       const params = parsed.params
         ? decodeModelTelemetry(parsed.params, { model, envelope: parsed.envelope })
         : null;
       if (!params || Object.keys(params).length === 0) {
+        const prevConnectivity = this.store.getSnapshot(sn)?.connectivity ?? null;
+        const nextConnectivity = this.statusTracker.state(sn);
+        if (prevConnectivity !== nextConnectivity) {
+          const connectivityDelta = this.store.upsertConnectivity(sn, nextConnectivity);
+          this.events.onDeviceDelta(sn, {
+            deviceId: sn,
+            changed: connectivityDelta.changed,
+            updatedAt: new Date().toISOString(),
+          });
+        }
+
         this.unknownParseCount += 1;
-        if (this.unknownParseCount <= 20 || this.unknownParseCount % 50 === 0) {
+        const payloadHex = payloadBuffer.subarray(0, Math.min(48, payloadBuffer.length)).toString('hex');
+        const benign = isBenignUnknownFrame(topic, payloadHex, parsed);
+        if (!benign && (this.unknownParseCount <= 20 || this.unknownParseCount % 50 === 0)) {
           console.warn(
             `[bridge][mqtt] unparsed(${this.unknownParseCount}) topic=${topic} mode=${parsed.debug.mode} preview=${parsed.debug.preview} hex=${parsed.debug.hex}`,
           );
         }
         return;
       }
-      this.statusTracker.onDataReceived(sn);
       const connectivityDelta = this.store.upsertConnectivity(sn, this.statusTracker.state(sn));
 
       const changed: Record<string, unknown> = {};

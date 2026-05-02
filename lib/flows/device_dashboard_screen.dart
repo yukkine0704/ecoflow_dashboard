@@ -135,15 +135,23 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   }
 
   AppStatusTone _statusTone() {
-    final online = _selected?.online;
-    if (online == null) return AppStatusTone.neutral;
-    return online ? AppStatusTone.active : AppStatusTone.warning;
+    final connectivity = _selected?.connectivity;
+    if (connectivity == null) return AppStatusTone.neutral;
+    return switch (connectivity) {
+      BridgeConnectivity.online => AppStatusTone.active,
+      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
+      BridgeConnectivity.offline => AppStatusTone.danger,
+    };
   }
 
   String _statusLabel() {
-    final online = _selected?.online;
-    if (online == null) return 'Estado N/D';
-    return online ? 'Online' : 'Offline';
+    final connectivity = _selected?.connectivity;
+    if (connectivity == null) return 'Estado N/D';
+    return switch (connectivity) {
+      BridgeConnectivity.online => 'Online',
+      BridgeConnectivity.assumeOffline => 'Assume offline',
+      BridgeConnectivity.offline => 'Offline',
+    };
   }
 
   AppStatusBadge _powerBadge(String label, double? watts) {

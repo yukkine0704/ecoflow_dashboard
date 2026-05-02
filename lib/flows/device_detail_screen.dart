@@ -175,7 +175,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   String _estimateLabel() {
     final battery = _snapshot.batteryPercent;
-    if (_snapshot.online == false) {
+    if (_snapshot.connectivity == BridgeConnectivity.offline) {
       return 'Disconnected';
     }
     if (battery == null) {
@@ -190,6 +190,22 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     }
     final estimatedHours = (battery / 100) * 12;
     return 'Est. ${estimatedHours.toStringAsFixed(0)}h remaining';
+  }
+
+  AppStatusTone _connectivityTone() {
+    return switch (_snapshot.connectivity) {
+      BridgeConnectivity.online => AppStatusTone.active,
+      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
+      BridgeConnectivity.offline => AppStatusTone.danger,
+    };
+  }
+
+  String _connectivityLabel() {
+    return switch (_snapshot.connectivity) {
+      BridgeConnectivity.online => 'Online',
+      BridgeConnectivity.assumeOffline => 'Assume offline',
+      BridgeConnectivity.offline => 'Offline',
+    };
   }
 
   List<_OutputChannelVm> _outputChannels() {
@@ -881,6 +897,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                   runSpacing: AppSpacing.sm,
                   children: [
                     AppStatusBadge(
+                      label: _connectivityLabel(),
+                      tone: _connectivityTone(),
+                    ),
+                    AppStatusBadge(
                       label: _snapshot.batteryPercent == null
                           ? 'Batería N/D'
                           : 'Batería ${_snapshot.batteryPercent}%',
@@ -951,6 +971,18 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                           ? AppStatusTone.neutral
                           : AppStatusTone.active,
                     ),
+                    if (_metricAsDouble('pd.powGet4p81') != null)
+                      AppStatusBadge(
+                        label:
+                            'Extra battery 1 ${_metricAsDouble('pd.powGet4p81')!.toStringAsFixed(0)}W',
+                        tone: AppStatusTone.active,
+                      ),
+                    if (_metricAsDouble('pd.powGet4p82') != null)
+                      AppStatusBadge(
+                        label:
+                            'Extra battery 2 ${_metricAsDouble('pd.powGet4p82')!.toStringAsFixed(0)}W',
+                        tone: AppStatusTone.active,
+                      ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.md),

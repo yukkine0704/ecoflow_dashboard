@@ -126,6 +126,13 @@ function buildEncCandidates(pdata, seq, encType, src) {
     pushUnique(xorWithKey(pdata, b3));
     pushUnique(xorWithRollingKey(pdata, seqBytes));
     pushUnique(xorWithRollingKey(pdata, [b0, b1]));
+    // Some newer firmwares/accounts appear to rotate XOR key variants that are
+    // not stable across devices. Keep this as last-resort fallback.
+    if (src !== 32) {
+        for (let key = 0; key <= 0xff; key += 1) {
+            pushUnique(xorWithKey(pdata, key));
+        }
+    }
     return candidates;
 }
 function readFixed32Float(bytes, offset) {
@@ -292,6 +299,7 @@ function extractHeaderMessages(bytes) {
 }
 function parseHeaderEnvelope(header) {
     let pdata = null;
+    const lengthDelimitedChunks = [];
     let encType = 0;
     let seq = 0;
     let cmdId = 0;
@@ -314,6 +322,20 @@ function parseHeaderEnvelope(header) {
             if (len.value < 0 || end > header.length)
                 break;
             pdata = header.slice(offset, end);
+            lengthDelimitedChunks.push({ field, bytes: pdata });
+            offset = end;
+            continue;
+        }
+        if (wireType === 2) {
+            const len = readVarint(header, offset);
+            if (!len)
+                break;
+            offset = len.nextOffset;
+            const end = offset + len.value;
+            if (len.value < 0 || end > header.length)
+                break;
+            const chunk = header.slice(offset, end);
+            lengthDelimitedChunks.push({ field, bytes: chunk });
             offset = end;
             continue;
         }
@@ -337,6 +359,12 @@ function parseHeaderEnvelope(header) {
         offset = skipWire(header, offset, wireType);
         if (offset < 0)
             break;
+    }
+    if (!pdata && lengthDelimitedChunks.length > 0) {
+        // Fallback for envelopes where payload is not mapped to field #1:
+        // pick the biggest length-delimited body.
+        const best = lengthDelimitedChunks.sort((a, b) => b.bytes.length - a.bytes.length)[0];
+        pdata = best?.bytes ?? null;
     }
     return { pdata, encType, seq, cmdId, cmdFunc, src };
 }
