@@ -53,7 +53,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       }
       setState(() => _snapshot = updated);
     });
-    _historySub = widget.repository.watchHistory(widget.deviceId).listen((series) {
+    _historySub = widget.repository.watchHistory(widget.deviceId).listen((
+      series,
+    ) {
       if (!mounted) {
         return;
       }
@@ -71,7 +73,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   String _peakDeltaLabel(List<double> values) {
     if (values.isEmpty) return 'Sin datos';
-    final sortedDesc = List<double>.from(values)..sort((a, b) => b.compareTo(a));
+    final sortedDesc = List<double>.from(values)
+      ..sort((a, b) => b.compareTo(a));
     final top1 = sortedDesc.first;
     final top2 = sortedDesc.length > 1 ? sortedDesc[1] : 0.0;
     final peakPct = top1 > 0 ? ((top1 - top2) / top1) * 100 : 0.0;
@@ -120,16 +123,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                   Text(
                     valueText,
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: cs.onSurface,
-                          fontWeight: FontWeight.w800,
-                        ),
+                      color: cs.onSurface,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                   Text(
                     trendText,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: accent,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -139,9 +142,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           Text(
             title,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: cs.onSurface,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: cs.onSurface,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -152,8 +155,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                     child: Text(
                       'Sin datos suficientes todavía.',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: cs.onSurfaceVariant,
-                          ),
+                        color: cs.onSurfaceVariant,
+                      ),
                     ),
                   ),
           ),
@@ -208,9 +211,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             borderData: FlBorderData(show: false),
             titlesData: const FlTitlesData(
               topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
               leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-              bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(showTitles: false),
+              ),
             ),
           ),
         );
@@ -229,7 +236,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       if (value == null) {
         continue;
       }
-      spots.add(FlSpot(point.timestamp.millisecondsSinceEpoch.toDouble(), value));
+      spots.add(
+        FlSpot(point.timestamp.millisecondsSinceEpoch.toDouble(), value),
+      );
     }
     return LineChartBarData(
       isCurved: true,
@@ -239,6 +248,35 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       belowBarData: BarAreaData(show: false),
       spots: spots,
     );
+  }
+
+  List<double> _energyWhByInterval({
+    required List<DeviceHistoryPoint> points,
+    required double? Function(DeviceHistoryPoint) selectorWatts,
+  }) {
+    if (points.length < 2) {
+      return const <double>[];
+    }
+    final values = <double>[];
+    for (var i = 1; i < points.length; i++) {
+      final previous = points[i - 1];
+      final current = points[i];
+      final previousW = selectorWatts(previous);
+      final currentW = selectorWatts(current);
+      if (previousW == null || currentW == null) {
+        continue;
+      }
+      final deltaMs = current.timestamp
+          .difference(previous.timestamp)
+          .inMilliseconds;
+      if (deltaMs <= 0) {
+        continue;
+      }
+      final deltaHours = deltaMs / Duration.millisecondsPerHour;
+      final avgPowerW = (previousW + currentW) / 2;
+      values.add(avgPowerW * deltaHours);
+    }
+    return values;
   }
 
   Widget _buildHistorySection(BuildContext context) {
@@ -263,7 +301,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     final points = series.points;
     final colors = Theme.of(context).colorScheme;
 
-    final solarValues = points.map((p) => p.inputSolarW).whereType<double>().toList();
+    final solarEnergyWh = _energyWhByInterval(
+      points: points,
+      selectorWatts: (p) => p.inputSolarW,
+    );
     final latestTs = points.isNotEmpty ? points.last.timestamp : null;
     final outputLivePoints = latestTs == null
         ? const <DeviceHistoryPoint>[]
@@ -278,13 +319,31 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         .map((p) => p.outputAcW)
         .whereType<double>()
         .toList();
-    final tempValues = points.map((p) => p.batteryTempC).whereType<double>().toList();
-    final batteryValues = points.map((p) => p.batteryPercent?.toDouble()).whereType<double>().toList();
+    final tempValues = points
+        .map((p) => p.batteryTempC)
+        .whereType<double>()
+        .toList();
+    final batteryValues = points
+        .map((p) => p.batteryPercent?.toDouble())
+        .whereType<double>()
+        .toList();
 
     final outputLines = <LineChartBarData>[
-      _historyLine(points: outputLivePoints, selector: (p) => p.outputAcW, color: colors.primary),
-      _historyLine(points: outputLivePoints, selector: (p) => p.outputDcW, color: colors.secondary),
-      _historyLine(points: outputLivePoints, selector: (p) => p.outputOtherW, color: colors.tertiary),
+      _historyLine(
+        points: outputLivePoints,
+        selector: (p) => p.outputAcW,
+        color: colors.primary,
+      ),
+      _historyLine(
+        points: outputLivePoints,
+        selector: (p) => p.outputDcW,
+        color: colors.secondary,
+      ),
+      _historyLine(
+        points: outputLivePoints,
+        selector: (p) => p.outputOtherW,
+        color: colors.tertiary,
+      ),
     ];
     final tempLine = _historyLine(
       points: points,
@@ -305,11 +364,13 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           icon: Icons.wb_sunny_rounded,
           accent: colors.primary,
           title: 'Solar Input',
-          valueText: solarValues.isEmpty ? '0W' : '${solarValues.last.toStringAsFixed(0)}W',
-          trendText: _peakDeltaLabel(solarValues),
-          hasData: solarValues.isNotEmpty,
+          valueText: solarEnergyWh.isEmpty
+              ? '0 Wh'
+              : '${solarEnergyWh.last.toStringAsFixed(1)} Wh',
+          trendText: _peakDeltaLabel(solarEnergyWh),
+          hasData: solarEnergyWh.isNotEmpty,
           chart: _buildAdaptiveBarChart(
-            values: solarValues,
+            values: solarEnergyWh,
             activeColor: colors.primary,
             inactiveColor: colors.primary.withValues(alpha: 0.35),
           ),
@@ -320,19 +381,33 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           icon: Icons.output_rounded,
           accent: colors.secondary,
           title: 'Salida por tipo',
-          valueText: outputValues.isEmpty ? '0W' : '${outputValues.last.toStringAsFixed(0)}W',
+          valueText: outputValues.isEmpty
+              ? '0W'
+              : '${outputValues.last.toStringAsFixed(0)}W',
           trendText: _peakDeltaLabel(outputValues),
           hasData: hasOutput,
           chart: LineChart(
             LineChartData(
               lineBarsData: outputLines,
-              gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: null),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: null,
+              ),
               borderData: FlBorderData(show: false),
               titlesData: const FlTitlesData(
-                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
               ),
             ),
           ),
@@ -343,19 +418,33 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           icon: Icons.device_thermostat_rounded,
           accent: colors.error,
           title: 'Temperatura bateria',
-          valueText: tempValues.isEmpty ? '0.0C' : '${tempValues.last.toStringAsFixed(1)}C',
+          valueText: tempValues.isEmpty
+              ? '0.0C'
+              : '${tempValues.last.toStringAsFixed(1)}C',
           trendText: _peakDeltaLabel(tempValues),
           hasData: hasTemp,
           chart: LineChart(
             LineChartData(
               lineBarsData: <LineChartBarData>[tempLine],
-              gridData: FlGridData(show: true, drawVerticalLine: false, horizontalInterval: null),
+              gridData: FlGridData(
+                show: true,
+                drawVerticalLine: false,
+                horizontalInterval: null,
+              ),
               borderData: FlBorderData(show: false),
               titlesData: const FlTitlesData(
-                topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                topTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                rightTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                leftTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
+                bottomTitles: AxisTitles(
+                  sideTitles: SideTitles(showTitles: false),
+                ),
               ),
             ),
           ),
@@ -366,7 +455,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           icon: Icons.battery_charging_full_rounded,
           accent: colors.tertiary,
           title: 'Bateria %',
-          valueText: batteryValues.isEmpty ? '0%' : '${batteryValues.last.toStringAsFixed(0)}%',
+          valueText: batteryValues.isEmpty
+              ? '0%'
+              : '${batteryValues.last.toStringAsFixed(0)}%',
           trendText: _peakDeltaLabel(batteryValues),
           hasData: batteryValues.isNotEmpty,
           chart: _buildAdaptiveBarChart(
@@ -593,9 +684,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           children: [
             Text(
               'EB${vm.index}',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
             ),
             const SizedBox(height: AppSpacing.sm),
             Wrap(
@@ -656,9 +747,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         children: [
           Text(
             'Extra Batteries',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w800,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
@@ -690,8 +781,10 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     };
 
     final normalizedEntries = _snapshot.metrics.entries.map((entry) {
-      final normalized =
-          entry.key.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      final normalized = entry.key.toLowerCase().replaceAll(
+        RegExp(r'[^a-z0-9]'),
+        '',
+      );
       return (original: entry.key, normalized: normalized, value: entry.value);
     }).toList();
 
@@ -739,7 +832,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           label: entry.original,
           watts: asNum,
           metricKey: entry.original,
-          category: entry.normalized.contains('usb') ||
+          category:
+              entry.normalized.contains('usb') ||
                   entry.normalized.contains('typec')
               ? 'usb'
               : (entry.normalized.contains('ac') ? 'ac' : 'dc'),
@@ -836,7 +930,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   _ThermalSummaryVm _thermalSummary() {
     final cells = _thermalCells();
     final bmsTemp = _firstTemperatureValue(const ['bms.temp', 'pd.temp']);
-    final batteryTemp = _firstTemperatureValue(const [
+    final batteryTemp =
+        _firstTemperatureValue(const [
           'battery.maxCellTempC',
           'pd.bmsMaxCellTemp',
           'bms.maxCellTemp',
@@ -851,8 +946,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     final dominantBand = sourceTemps.isEmpty
         ? _ThermalBand.nominal
         : sourceTemps
-            .map(_thermalBandFor)
-            .reduce((a, b) => a.severity >= b.severity ? a : b);
+              .map(_thermalBandFor)
+              .reduce((a, b) => a.severity >= b.severity ? a : b);
 
     final min = sourceTemps.isEmpty ? null : sourceTemps.reduce(math.min);
     final max = sourceTemps.isEmpty ? null : sourceTemps.reduce(math.max);
@@ -867,7 +962,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     );
   }
 
-  Color _bandColor(BuildContext context, _ThermalBand band, {bool chip = false}) {
+  Color _bandColor(
+    BuildContext context,
+    _ThermalBand band, {
+    bool chip = false,
+  }) {
     final cs = Theme.of(context).colorScheme;
     return switch (band) {
       _ThermalBand.cool => chip ? const Color(0xFF62C1A6) : cs.secondary,
@@ -908,7 +1007,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                         _snapshot.imageUrl!,
                         fit: isMobile ? BoxFit.cover : BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) => Container(
-                          color: colors.primaryContainer.withValues(alpha: 0.32),
+                          color: colors.primaryContainer.withValues(
+                            alpha: 0.32,
+                          ),
                           child: const Icon(
                             Icons.battery_charging_full_rounded,
                             size: 56,
@@ -1054,26 +1155,29 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           borderRadius: BorderRadius.circular(compact ? 18 : 22),
         ),
         child: Column(
-          crossAxisAlignment:
-              compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
+          crossAxisAlignment: compact
+              ? CrossAxisAlignment.center
+              : CrossAxisAlignment.start,
           children: [
             Text(
               channel.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: cs.onSurfaceVariant,
-                    letterSpacing: 0.4,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: cs.onSurfaceVariant,
+                letterSpacing: 0.4,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 2),
             Text(
-              channel.watts == null ? 'N/D' : '${channel.watts!.toStringAsFixed(0)}W',
+              channel.watts == null
+                  ? 'N/D'
+                  : '${channel.watts!.toStringAsFixed(0)}W',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w800,
-                  ),
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ],
         ),
@@ -1138,7 +1242,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   Widget _buildThermalCard(BuildContext context) {
     final summary = _thermalSummary();
     final cs = Theme.of(context).colorScheme;
-    final indicatorColor = _bandColor(context, summary.dominantBand, chip: true);
+    final indicatorColor = _bandColor(
+      context,
+      summary.dominantBand,
+      chip: true,
+    );
 
     Widget thermalHeader() {
       final label = switch (summary.dominantBand) {
@@ -1156,16 +1264,16 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
               children: [
                 Text(
                   'THERMAL MONITORING',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        letterSpacing: 1.2,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(letterSpacing: 1.2),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Cell Array Map',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
-                      ),
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ],
             ),
@@ -1179,9 +1287,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
             child: Text(
               label,
               style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: indicatorColor,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: indicatorColor,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -1208,7 +1316,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
         animation: _thermalController,
         builder: (context, child) {
           final phase = _thermalController.value;
-          final pulse = isHot ? (0.96 + 0.08 * math.sin(phase * math.pi * 2)) : 1.0;
+          final pulse = isHot
+              ? (0.96 + 0.08 * math.sin(phase * math.pi * 2))
+              : 1.0;
           return Transform.scale(scale: pulse, child: child);
         },
         child: Container(
@@ -1229,9 +1339,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           child: Text(
             '${cell.tempC.toStringAsFixed(1)}°',
             style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: color,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       );
@@ -1322,9 +1432,9 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
           const SizedBox(height: AppSpacing.sm),
           Text(
             'Active cells: ${summary.cells.length}${summary.cells.isNotEmpty ? '/${summary.cells.length}' : ''}',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: cs.onSurfaceVariant,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.labelMedium?.copyWith(color: cs.onSurfaceVariant),
           ),
         ],
       ),
@@ -1704,10 +1814,7 @@ class _ThermalOrbPainter extends CustomPainter {
 
     final base = Paint()
       ..shader = RadialGradient(
-        colors: [
-          color.withValues(alpha: 0.55),
-          color.withValues(alpha: 0.18),
-        ],
+        colors: [color.withValues(alpha: 0.55), color.withValues(alpha: 0.18)],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, base);
 
@@ -1729,8 +1836,10 @@ class _ThermalOrbPainter extends CustomPainter {
         final ang = t * math.pi * 2 + (phase * math.pi * 2);
         final r =
             radius * (0.45 + 0.1 * math.sin((phase * 4 + t * 7) * math.pi * 2));
-        final point =
-            Offset(center.dx + math.cos(ang) * r, center.dy + math.sin(ang) * r);
+        final point = Offset(
+          center.dx + math.cos(ang) * r,
+          center.dy + math.sin(ang) * r,
+        );
         if (i == 0) {
           path.moveTo(point.dx, point.dy);
         } else {
