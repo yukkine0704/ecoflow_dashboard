@@ -99,6 +99,7 @@ class _AppNeedleGaugeCardState extends State<AppNeedleGaugeCard>
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AppCard(
       surfaceLevel: 1,
       child: AnimatedBuilder(
@@ -137,19 +138,23 @@ class _AppNeedleGaugeCardState extends State<AppNeedleGaugeCard>
               ),
               const SizedBox(height: AppSpacing.lg),
               Center(
-                child: SizedBox(
-                  width: 260,
-                  height: 162,
-                  child: CustomPaint(
-                    painter: _NeedleGaugePainter(
-                      progress: progress,
-                      trackColor: colors.gaugeTrack,
-                      primary: colors.primaryContainer,
-                      secondary: colors.secondary,
-                      tertiary: colors.tertiaryContainer,
-                      textColor: colors.onSurfaceVariant,
-                      lowPowerProgress: (widget.lowPowerThreshold / _safeMax)
-                          .clamp(0.0, 1.0),
+                child: _NeumorphicNeedleWell(
+                  isDark: isDark,
+                  tone: colors.surfaceHigh,
+                  child: SizedBox(
+                    width: 260,
+                    height: 162,
+                    child: CustomPaint(
+                      painter: _NeedleGaugePainter(
+                        progress: progress,
+                        trackColor: colors.gaugeTrack,
+                        primary: colors.primaryContainer,
+                        secondary: colors.secondary,
+                        tertiary: colors.tertiaryContainer,
+                        textColor: colors.onSurfaceVariant,
+                        lowPowerProgress: (widget.lowPowerThreshold / _safeMax)
+                            .clamp(0.0, 1.0),
+                      ),
                     ),
                   ),
                 ),
@@ -196,6 +201,57 @@ class _AppNeedleGaugeCardState extends State<AppNeedleGaugeCard>
           );
         },
       ),
+    );
+  }
+}
+
+class _NeumorphicNeedleWell extends StatelessWidget {
+  const _NeumorphicNeedleWell({
+    required this.isDark,
+    required this.tone,
+    required this.child,
+  });
+
+  final bool isDark;
+  final Color tone;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final lightShadow = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.white.withValues(alpha: 0.68);
+    final darkShadow = isDark
+        ? Colors.black.withValues(alpha: 0.5)
+        : Colors.black.withValues(alpha: 0.12);
+    final fill = Color.lerp(tone, Colors.black, isDark ? 0.08 : 0.015) ?? tone;
+    final border = Color.lerp(fill, Colors.black, isDark ? 0.18 : 0.1) ?? fill;
+
+    return Container(
+      width: 284,
+      height: 182,
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(
+          color: border.withValues(alpha: isDark ? 0.7 : 0.52),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: darkShadow,
+            offset: const Offset(2, 2),
+            blurRadius: 8,
+          ),
+          BoxShadow(
+            color: lightShadow,
+            offset: const Offset(-2, -2),
+            blurRadius: 8,
+          ),
+        ],
+      ),
+      alignment: Alignment.center,
+      child: child,
     );
   }
 }

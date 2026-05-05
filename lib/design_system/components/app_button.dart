@@ -42,6 +42,7 @@ class _AppButtonState extends State<AppButton> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final textTheme = Theme.of(context).textTheme;
     final height = switch (widget.size) {
       AppButtonSize.small => 44.0,
@@ -54,13 +55,61 @@ class _AppButtonState extends State<AppButton> {
       AppButtonSize.large => 24.0,
     };
 
-    final ({Color bg, Color fg, Gradient? gradient}) palette = _palette(colors);
+    final ({Color bg, Color fg, Gradient? gradient}) palette = _palette(
+      colors,
+      isDark,
+    );
     final bgColor = _enabled
         ? palette.bg
         : Color.alphaBlend(
             colors.onSurface.withValues(alpha: 0.08),
             palette.bg,
           );
+    final borderColor = Color.lerp(
+          bgColor,
+          palette.fg,
+          isDark ? 0.22 : 0.16,
+        ) ??
+        bgColor;
+    final lightShadow = isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.white.withValues(alpha: 0.9);
+    final darkShadow = isDark
+        ? Colors.black.withValues(alpha: 0.42)
+        : colors.onSurface.withValues(alpha: 0.16);
+    final normalShadows = <BoxShadow>[
+      BoxShadow(
+        color: darkShadow,
+        blurRadius: 16,
+        offset: const Offset(6, 6),
+      ),
+      BoxShadow(
+        color: lightShadow,
+        blurRadius: 16,
+        offset: const Offset(-6, -6),
+      ),
+    ];
+    final pressedShadows = <BoxShadow>[
+      BoxShadow(
+        color: darkShadow.withValues(alpha: isDark ? 0.28 : 0.11),
+        blurRadius: 8,
+        offset: const Offset(2, 2),
+      ),
+      BoxShadow(
+        color: lightShadow.withValues(alpha: isDark ? 0.04 : 0.7),
+        blurRadius: 8,
+        offset: const Offset(-2, -2),
+      ),
+    ];
+    final pressedGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        bgColor.withValues(alpha: isDark ? 0.72 : 0.94),
+        bgColor,
+        bgColor.withValues(alpha: isDark ? 0.92 : 0.82),
+      ],
+    );
 
     return Semantics(
       button: true,
@@ -88,17 +137,13 @@ class _AppButtonState extends State<AppButton> {
                 padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                 decoration: BoxDecoration(
                   borderRadius: AppRadius.full,
-                  gradient: palette.gradient,
+                  gradient: _pressed ? pressedGradient : palette.gradient,
                   color: palette.gradient == null ? bgColor : null,
-                  boxShadow: _pressed
-                      ? null
-                      : [
-                          BoxShadow(
-                            color: colors.shadowTint.withValues(alpha: 0.08),
-                            blurRadius: 28,
-                            offset: const Offset(0, 12),
-                          ),
-                        ],
+                  border: Border.all(
+                    color: borderColor.withValues(alpha: isDark ? 0.74 : 0.64),
+                    width: 1,
+                  ),
+                  boxShadow: _pressed ? pressedShadows : normalShadows,
                 ),
                 child: Center(
                   child: _buildChild(
@@ -155,19 +200,20 @@ class _AppButtonState extends State<AppButton> {
     );
   }
 
-  ({Color bg, Color fg, Gradient? gradient}) _palette(AppColors colors) {
+  ({Color bg, Color fg, Gradient? gradient}) _palette(
+    AppColors colors,
+    bool isDark,
+  ) {
     return switch (widget.variant) {
       AppButtonVariant.primary => (
-        bg: colors.primaryContainer,
-        fg: colors.onPrimaryContainer,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
+        bg: Color.lerp(
+              colors.surfaceHigh,
+              colors.primaryContainer,
+              isDark ? 0.36 : 0.48,
+            ) ??
             colors.primaryContainer,
-            colors.primaryContainer.withValues(alpha: 0.86),
-          ],
-        ),
+        fg: colors.onPrimaryContainer,
+        gradient: null,
       ),
       AppButtonVariant.secondary => (
         bg: colors.surfaceHigh,
@@ -175,18 +221,16 @@ class _AppButtonState extends State<AppButton> {
         gradient: null,
       ),
       AppButtonVariant.tertiary => (
-        bg: colors.surfaceLow.withValues(alpha: 0.3),
+        bg: Color.lerp(colors.surface, colors.surfaceLow, 0.8) ??
+            colors.surfaceLow.withValues(alpha: 0.3),
         fg: colors.onSurface,
         gradient: null,
       ),
       AppButtonVariant.danger => (
-        bg: colors.error,
-        fg: Colors.white,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [colors.error, colors.error.withValues(alpha: 0.75)],
-        ),
+        bg: Color.lerp(colors.surfaceHigh, colors.error, isDark ? 0.32 : 0.38) ??
+            colors.error,
+        fg: colors.error,
+        gradient: null,
       ),
     };
   }

@@ -32,6 +32,7 @@ class AppStatusBadge extends StatefulWidget {
 class _AppStatusBadgeState extends State<AppStatusBadge>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  bool _isPressed = false;
 
   @override
   void initState() {
@@ -65,46 +66,102 @@ class _AppStatusBadgeState extends State<AppStatusBadge>
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final palette = switch (widget.tone) {
       AppStatusTone.neutral => (
         bg: colors.surfaceHigh,
         fg: colors.onSurfaceVariant,
       ),
       AppStatusTone.active => (
-        bg: colors.secondaryContainer.withValues(alpha: 0.22),
+        bg: Color.lerp(colors.surfaceHigh, colors.secondaryContainer, 0.38) ??
+            colors.secondaryContainer.withValues(alpha: 0.22),
         fg: colors.onSecondaryContainer,
       ),
       AppStatusTone.warning => (
-        bg: colors.tertiaryContainer.withValues(alpha: 0.3),
+        bg: Color.lerp(colors.surfaceHigh, colors.tertiaryContainer, 0.4) ??
+            colors.tertiaryContainer.withValues(alpha: 0.3),
         fg: colors.tertiary,
       ),
       AppStatusTone.danger => (
-        bg: colors.error.withValues(alpha: 0.2),
+        bg: Color.lerp(colors.surfaceHigh, colors.error, 0.2) ??
+            colors.error.withValues(alpha: 0.2),
         fg: colors.error,
       ),
     };
 
+    final lightShadow = isDark ? Colors.white.withValues(alpha: 0.06) : Colors.white;
+    final darkShadow = isDark
+        ? Colors.black.withValues(alpha: 0.45)
+        : colors.onSurface.withValues(alpha: 0.16);
+    final borderColor = Color.lerp(
+          palette.bg,
+          palette.fg,
+          isDark ? 0.2 : 0.14,
+        ) ??
+        palette.bg;
+
+    final outerShadow = <BoxShadow>[
+      BoxShadow(
+        color: lightShadow,
+        offset: const Offset(-3, -2),
+        blurRadius: 8,
+      ),
+      BoxShadow(
+        color: darkShadow,
+        offset: const Offset(3, 2),
+        blurRadius: 8,
+      ),
+    ];
+    final pressedShadow = <BoxShadow>[
+      BoxShadow(
+        color: darkShadow.withValues(alpha: isDark ? 0.28 : 0.12),
+        offset: const Offset(1, 1),
+        blurRadius: 3,
+      ),
+      BoxShadow(
+        color: lightShadow.withValues(alpha: isDark ? 0.05 : 0.42),
+        offset: const Offset(-1, -1),
+        blurRadius: 3,
+      ),
+    ];
+    final pressedGradient = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        palette.bg.withValues(alpha: isDark ? 0.7 : 0.92),
+        palette.bg,
+        palette.bg.withValues(alpha: isDark ? 0.92 : 0.78),
+      ],
+    );
+
     final badge = AnimatedContainer(
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 130),
+      curve: Curves.easeOutCubic,
       padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.md * widget.scale,
         vertical: AppSpacing.sm * widget.scale,
       ),
       decoration: BoxDecoration(
         color: palette.bg,
+        gradient: _isPressed ? pressedGradient : null,
         borderRadius: AppRadius.full,
-        border: widget.highlighted
-            ? Border.all(color: palette.fg, width: 1.3)
-            : null,
-        boxShadow: widget.highlighted
-            ? [
-                BoxShadow(
-                  color: palette.fg.withValues(alpha: 0.25),
-                  blurRadius: 10,
-                  spreadRadius: 0.6,
-                ),
-              ]
-            : null,
+        border: Border.all(
+          color: widget.highlighted
+              ? palette.fg.withValues(alpha: isDark ? 0.82 : 0.9)
+              : (_isPressed
+                    ? borderColor.withValues(alpha: isDark ? 0.18 : 0.84)
+                    : borderColor),
+          width: widget.highlighted ? 1.3 : 1,
+        ),
+        boxShadow: [
+          ...(_isPressed ? pressedShadow : outerShadow),
+          if (widget.highlighted)
+            BoxShadow(
+              color: palette.fg.withValues(alpha: isDark ? 0.2 : 0.22),
+              blurRadius: 9,
+              spreadRadius: 0.3,
+            ),
+        ],
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -145,10 +202,16 @@ class _AppStatusBadgeState extends State<AppStatusBadge>
     if (widget.onTap == null) {
       return badge;
     }
-    return InkWell(
-      borderRadius: AppRadius.full,
-      onTap: widget.onTap,
-      child: badge,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => setState(() => _isPressed = true),
+        onTapUp: (_) => setState(() => _isPressed = false),
+        onTapCancel: () => setState(() => _isPressed = false),
+        onTap: widget.onTap,
+        child: badge,
+      ),
     );
   }
 }

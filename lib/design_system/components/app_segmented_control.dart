@@ -27,16 +27,37 @@ class AppSegmentedControl<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final shellColor = isDark ? colors.surfaceLow : colors.surface;
-    final shellShadow = isDark
-        ? colors.shadowTint.withValues(alpha: 0.16)
-        : colors.shadowTint.withValues(alpha: 0.08);
+    final shellColor = Color.lerp(
+          isDark ? colors.surfaceLow : colors.surface,
+          colors.surfaceHigh,
+          isDark ? 0.34 : 0.46,
+        ) ??
+        (isDark ? colors.surfaceLow : colors.surface);
+    final shellLight = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.white.withValues(alpha: 0.82);
+    final shellDark = isDark
+        ? Colors.black.withValues(alpha: 0.38)
+        : colors.onSurface.withValues(alpha: 0.14);
+    final shellBorder = Color.lerp(
+          shellColor,
+          colors.onSurface,
+          isDark ? 0.12 : 0.08,
+        ) ??
+        shellColor;
     final selectedBg = isDark
-        ? colors.surfaceHighest
+        ? Color.lerp(colors.surfaceHighest, colors.primaryContainer, 0.2) ??
+            colors.surfaceHighest
         : Color.alphaBlend(
             colors.primaryContainer.withValues(alpha: 0.45),
             colors.surface,
           );
+    final selectedBorder = Color.lerp(
+          selectedBg,
+          colors.onSurface,
+          isDark ? 0.16 : 0.1,
+        ) ??
+        selectedBg;
     final selectedFg = isDark ? colors.onSurface : colors.onPrimaryContainer;
     final idleFg = isDark
         ? colors.onSurfaceVariant.withValues(alpha: 0.9)
@@ -48,11 +69,19 @@ class AppSegmentedControl<T> extends StatelessWidget {
       decoration: BoxDecoration(
         color: shellColor,
         borderRadius: AppRadius.full,
+        border: Border.all(
+          color: shellBorder.withValues(alpha: isDark ? 0.66 : 0.56),
+        ),
         boxShadow: [
           BoxShadow(
-            color: shellShadow,
-            blurRadius: 24,
-            offset: const Offset(0, 10),
+            color: shellDark,
+            blurRadius: 18,
+            offset: const Offset(7, 7),
+          ),
+          BoxShadow(
+            color: shellLight,
+            blurRadius: 18,
+            offset: const Offset(-7, -7),
           ),
         ],
       ),
@@ -76,12 +105,28 @@ class AppSegmentedControl<T> extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: selected ? selectedBg : Colors.transparent,
                   borderRadius: AppRadius.full,
+                  border: selected
+                      ? Border.all(
+                          color: selectedBorder.withValues(
+                            alpha: isDark ? 0.74 : 0.62,
+                          ),
+                        )
+                      : null,
                   boxShadow: selected
                       ? [
                           BoxShadow(
-                            color: shellShadow,
-                            blurRadius: 14,
-                            offset: const Offset(0, 5),
+                            color: shellDark.withValues(
+                              alpha: isDark ? 0.3 : 0.13,
+                            ),
+                            blurRadius: 8,
+                            offset: const Offset(3, 3),
+                          ),
+                          BoxShadow(
+                            color: shellLight.withValues(
+                              alpha: isDark ? 0.05 : 0.72,
+                            ),
+                            blurRadius: 8,
+                            offset: const Offset(-3, -3),
                           ),
                         ]
                       : null,

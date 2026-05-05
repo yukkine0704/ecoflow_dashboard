@@ -228,67 +228,54 @@ extension _DeviceDetailThermalCard on _DeviceDetailScreenState {
             curve: Curves.easeOutCubic,
             builder: (context, animatedColor, unusedChild) {
               final color = animatedColor ?? targetColor;
-              final showShadow = heat >= 0.55;
+              final tempTextColor = switch (cell.band) {
+                _ThermalBand.cool => cs.secondary,
+                _ThermalBand.nominal => cs.onSurface,
+                _ThermalBand.warm => cs.surface,
+                _ThermalBand.critical => cs.error,
+              };
               return AnimatedBuilder(
                 animation: _thermalController,
                 builder: (context, child) {
                   final phase = heat > 0
                       ? (_thermalController.value + phaseOffset) % 1.0
                       : 0.0;
-                  final amplitude = 0.06 * heat;
+                  final amplitude = 0.035 * heat;
                   final pulse = 1.0 + amplitude * math.sin(phase * math.pi * 2);
                   return Transform.scale(scale: pulse, child: child);
                 },
-                child: Container(
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.transparent,
-                    boxShadow: showShadow
-                        ? [
-                            BoxShadow(
-                              color: color.withValues(
-                                alpha: 0.16 + 0.12 * heat,
-                              ),
-                              blurRadius: 10 + (10 * heat),
-                              spreadRadius: 0.4 + (1.2 * heat),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    RepaintBoundary(
+                      child: AnimatedBuilder(
+                        animation: _thermalController,
+                        builder: (context, _) {
+                          final phase = heat > 0
+                              ? (_thermalController.value + phaseOffset) % 1.0
+                              : 0.0;
+                          return CustomPaint(
+                            painter: _ThermalOrbPainter(
+                              phase: phase,
+                              band: cell.band,
+                              color: color,
+                              intensity: heat,
                             ),
-                          ]
-                        : null,
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      RepaintBoundary(
-                        child: AnimatedBuilder(
-                          animation: _thermalController,
-                          builder: (context, _) {
-                            final phase = heat > 0
-                                ? (_thermalController.value + phaseOffset) % 1.0
-                                : 0.0;
-                            return CustomPaint(
-                              painter: _ThermalOrbPainter(
-                                phase: phase,
-                                band: cell.band,
-                                color: color,
-                                intensity: heat,
-                              ),
-                            );
-                          },
-                        ),
+                          );
+                        },
                       ),
-                      Center(
-                        child: Text(
-                          '${cell.tempC.toStringAsFixed(1)}°',
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: color,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        ),
+                    ),
+                    Center(
+                      child: Text(
+                        '${cell.tempC.toStringAsFixed(1)}°',
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(
+                              color: tempTextColor,
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               );
             },
@@ -328,7 +315,31 @@ extension _DeviceDetailThermalCard on _DeviceDetailScreenState {
                 mainAxisSpacing: 10,
                 childAspectRatio: 1,
               ),
-              itemBuilder: (context, index) => cellBubble(summary.cells[index]),
+              itemBuilder: (context, index) {
+                final cell = summary.cells[index];
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    cellBubble(cell),
+                    Align(
+                      alignment: Alignment.topCenter,
+                      child: Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          cell.label,
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: cs.onSurfaceVariant.withValues(
+                                  alpha: 0.86,
+                                ),
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           const SizedBox(height: AppSpacing.md),
           Wrap(
@@ -502,12 +513,12 @@ class _ThermalOrbPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.shortestSide * 0.39;
+    final radius = size.shortestSide * 0.36;
 
     final glowPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: 0.1 + 0.16 * intensity)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
+      ..color = color.withValues(alpha: 0.08 + 0.12 * intensity)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
     canvas.drawCircle(center, radius + 3, glowPaint);
 
     final base = Paint()
@@ -521,8 +532,8 @@ class _ThermalOrbPainter extends CustomPainter {
 
     final ringPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = color.withValues(alpha: 0.8);
+      ..strokeWidth = 1.2
+      ..color = color.withValues(alpha: 0.72);
     canvas.drawCircle(
       center,
       radius * (0.85 + 0.05 * math.sin(phase * math.pi * 2)),
@@ -531,7 +542,7 @@ class _ThermalOrbPainter extends CustomPainter {
 
     if (band.severity >= 2) {
       final path = Path();
-      final spikes = 18;
+      final spikes = 14;
       for (var i = 0; i <= spikes; i++) {
         final t = i / spikes;
         final ang = t * math.pi * 2 + (phase * math.pi * 2);

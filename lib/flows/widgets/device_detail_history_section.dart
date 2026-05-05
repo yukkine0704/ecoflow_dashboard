@@ -22,15 +22,47 @@ extension _DeviceDetailHistorySection on _DeviceDetailScreenState {
     required bool hasData,
   }) {
     final cs = Theme.of(context).colorScheme;
+    final ds = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardTone = Color.lerp(
+          ds.surface,
+          ds.surfaceHigh,
+          isDark ? 0.5 : 0.72,
+        ) ??
+        ds.surfaceHigh;
+    final cardBorder = Color.lerp(
+          cardTone,
+          ds.onSurface,
+          isDark ? 0.14 : 0.08,
+        ) ??
+        cardTone;
+    final lightShadow = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : Colors.white.withValues(alpha: 0.84);
+    final darkShadow = isDark
+        ? Colors.black.withValues(alpha: 0.44)
+        : ds.onSurface.withValues(alpha: 0.14);
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(30),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: <Color>[cs.surfaceContainerHigh, cs.surfaceContainerLow],
+        color: cardTone,
+        border: Border.all(
+          color: cardBorder.withValues(alpha: isDark ? 0.68 : 0.54),
         ),
+        boxShadow: <BoxShadow>[
+          BoxShadow(
+            color: darkShadow,
+            blurRadius: 22,
+            offset: const Offset(10, 10),
+          ),
+          BoxShadow(
+            color: lightShadow,
+            blurRadius: 22,
+            offset: const Offset(-10, -10),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,10 +73,34 @@ extension _DeviceDetailHistorySection on _DeviceDetailScreenState {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: accent.withValues(alpha: 0.18),
                   borderRadius: BorderRadius.circular(24),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: <Color>[
+                      accent.withValues(alpha: isDark ? 0.24 : 0.22),
+                      accent.withValues(alpha: isDark ? 0.34 : 0.3),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Color.lerp(accent, ds.onSurface, 0.22)!.withValues(
+                      alpha: isDark ? 0.76 : 0.62,
+                    ),
+                  ),
+                  boxShadow: <BoxShadow>[
+                    BoxShadow(
+                      color: darkShadow.withValues(alpha: isDark ? 0.28 : 0.12),
+                      blurRadius: 8,
+                      offset: const Offset(3, 3),
+                    ),
+                    BoxShadow(
+                      color: lightShadow.withValues(alpha: isDark ? 0.05 : 0.72),
+                      blurRadius: 8,
+                      offset: const Offset(-3, -3),
+                    ),
+                  ],
                 ),
-                child: Icon(icon, color: accent),
+                child: Icon(icon, color: accent, size: 22),
               ),
               const Spacer(),
               Column(
@@ -60,7 +116,7 @@ extension _DeviceDetailHistorySection on _DeviceDetailScreenState {
                   Text(
                     trendText,
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: accent,
+                      color: accent.withValues(alpha: 0.95),
                       fontWeight: FontWeight.w700,
                     ),
                   ),

@@ -61,6 +61,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   bool _loading = true;
   bool _saving = false;
+  bool _mockSecurityLock = false;
+  bool _mockEcoMode = true;
+  bool _mockDefaultSwitch = true;
   ThemeMode _themeMode = ThemeMode.system;
   static const List<SegmentOption<ThemeMode>> _themeOptions = [
     SegmentOption<ThemeMode>(
@@ -339,6 +342,95 @@ class _SettingsScreenState extends State<SettingsScreen> {
                         options: _themeOptions,
                         value: _themeMode,
                         onChanged: _setThemeMode,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.md),
+                AppCard(
+                  surfaceLevel: 2,
+                  padding: const EdgeInsets.all(AppSpacing.md),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Switch mock preview',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xs),
+                      Text(
+                        'Visual demo only, does not affect saved settings.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Device lock',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          AppSwitch(
+                            value: _mockSecurityLock,
+                            onChanged: (next) {
+                              setState(() => _mockSecurityLock = next);
+                            },
+                            activeTrackColor: const Color(0xFF3BBE7A),
+                            inactiveTrackColor: const Color(0xFFE18686),
+                            activeIcon: const Icon(Icons.lock_open_rounded),
+                            inactiveIcon: const Icon(Icons.lock_rounded),
+                            activeThumbIcon: const Icon(Icons.check_rounded),
+                            inactiveThumbIcon: const Icon(Icons.close_rounded),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Eco mode',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          AppSwitch(
+                            value: _mockEcoMode,
+                            onChanged: (next) {
+                              setState(() => _mockEcoMode = next);
+                            },
+                            width: 72,
+                            activeTrackGradient: const LinearGradient(
+                              colors: [Color(0xFF72DFA8), Color(0xFF2FA76E)],
+                            ),
+                            inactiveTrackGradient: const LinearGradient(
+                              colors: [Color(0xFFE8D6A5), Color(0xFFC0A86A)],
+                            ),
+                            activeIcon: const Icon(Icons.eco_rounded),
+                            inactiveIcon: const Icon(Icons.power_settings_new),
+                            activeThumbIcon: const Icon(Icons.bolt_rounded),
+                            inactiveThumbIcon: const Icon(
+                              Icons.pause_rounded,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Default switch',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                          AppSwitch(
+                            value: _mockDefaultSwitch,
+                            onChanged: (next) {
+                              setState(() => _mockDefaultSwitch = next);
+                            },
+                          ),
+                        ],
                       ),
                     ],
                   ),
