@@ -186,7 +186,10 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
       return;
     }
     final elapsed = DateTime.now().difference(life.startedAt!);
-    final remainingMs = math.max(0, life.remaining.inMilliseconds - elapsed.inMilliseconds);
+    final remainingMs = math.max(
+      0,
+      life.remaining.inMilliseconds - elapsed.inMilliseconds,
+    );
     life.remaining = Duration(milliseconds: remainingMs);
     life.cancel();
   }
@@ -280,7 +283,10 @@ class AppGooeyToasterHostState extends State<AppGooeyToasterHost>
           verticalTop: true,
           onToggleExpanded: () {
             if (topToasts.length > 1) {
-              _setExpandedForPosition(AppToastPosition.topCenter, !_expandedTop);
+              _setExpandedForPosition(
+                AppToastPosition.topCenter,
+                !_expandedTop,
+              );
             }
           },
           onDismiss: dismissToast,
@@ -343,7 +349,9 @@ class _ToastStack extends StatelessWidget {
 
     final insets = MediaQuery.paddingOf(context);
     final edgeOffset = (verticalTop ? insets.top : insets.bottom) + offset;
-    final visibleCount = expanded ? toasts.length : math.min(toasts.length, visibleToasts);
+    final visibleCount = expanded
+        ? toasts.length
+        : math.min(toasts.length, visibleToasts);
 
     return Positioned(
       top: verticalTop ? edgeOffset : null,
@@ -452,10 +460,7 @@ class _StackedToastItem extends StatelessWidget {
         alignment: Alignment.topCenter,
         child: Opacity(
           opacity: opacity,
-          child: IgnorePointer(
-            ignoring: index != 0,
-            child: card,
-          ),
+          child: IgnorePointer(ignoring: index != 0, child: card),
         ),
       ),
     );
@@ -487,7 +492,11 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
   @override
   Widget build(BuildContext context) {
     final colors = context.appColors;
-    final palette = _palette(colors, widget.toast.type, Theme.of(context).brightness);
+    final palette = _palette(
+      colors,
+      widget.toast.type,
+      Theme.of(context).brightness,
+    );
     final hasBody =
         (widget.toast.description?.isNotEmpty ?? false) ||
         widget.toast.action != null ||
@@ -544,7 +553,8 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
                           widget.toast.title,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
                                 color: palette.text,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -555,9 +565,7 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
                           padding: const EdgeInsets.only(left: AppSpacing.sm),
                           child: Text(
                             _formatTimestamp(widget.toast.createdAt),
-                            style: Theme.of(context)
-                                .textTheme
-                                .labelSmall
+                            style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(color: palette.meta),
                           ),
                         ),
@@ -565,10 +573,7 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
                   ),
                   if (showExpandedBody) ...[
                     const SizedBox(height: AppSpacing.sm),
-                    _ToastBody(
-                      toast: widget.toast,
-                      metaColor: palette.meta,
-                    ),
+                    _ToastBody(toast: widget.toast, metaColor: palette.meta),
                     if (widget.toast.action != null) ...[
                       const SizedBox(height: AppSpacing.sm),
                       Align(
@@ -594,7 +599,8 @@ class _GooeyToastCardState extends State<_GooeyToastCard> {
                             ),
                             child: Text(
                               widget.toast.action!.label,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              style: Theme.of(context).textTheme.labelSmall
+                                  ?.copyWith(
                                     color: palette.actionText,
                                     fontWeight: FontWeight.w800,
                                   ),
@@ -641,19 +647,17 @@ class _ToastBody extends StatelessWidget {
                 description,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: metaColor),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: metaColor),
               ),
             if (hasMeta) ...[
               const SizedBox(height: AppSpacing.xs),
               Text(
                 toast.meta!,
-                style: Theme.of(context)
-                    .textTheme
-                    .labelSmall
-                    ?.copyWith(color: metaColor),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: metaColor),
               ),
             ],
           ],
@@ -665,8 +669,9 @@ class _ToastBody extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style:
-                Theme.of(context).textTheme.bodyMedium?.copyWith(color: metaColor),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: metaColor),
           ),
         );
       case AppToastBodyLayout.right:
@@ -677,8 +682,9 @@ class _ToastBody extends StatelessWidget {
             textAlign: TextAlign.right,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
-            style:
-                Theme.of(context).textTheme.bodyMedium?.copyWith(color: metaColor),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: metaColor),
           ),
         );
       case AppToastBodyLayout.spread:
@@ -690,20 +696,18 @@ class _ToastBody extends StatelessWidget {
                 description,
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context)
-                    .textTheme
-                    .bodyMedium
-                    ?.copyWith(color: metaColor),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: metaColor),
               ),
             ),
             if (hasMeta) ...[
               const SizedBox(width: AppSpacing.sm),
               Text(
                 toast.meta!,
-                style: Theme.of(context)
-                    .textTheme
-                    .labelSmall
-                    ?.copyWith(color: metaColor),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelSmall?.copyWith(color: metaColor),
               ),
             ],
           ],
@@ -763,7 +767,11 @@ class _GooeyPalette {
   final Color glow;
 }
 
-_GooeyPalette _palette(AppColors colors, AppToastType type, Brightness brightness) {
+_GooeyPalette _palette(
+  AppColors colors,
+  AppToastType type,
+  Brightness brightness,
+) {
   final dark = brightness == Brightness.dark;
 
   switch (type) {
@@ -891,12 +899,7 @@ class _GooeySurfacePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
 
-    canvas.drawShadow(
-      path,
-      glow,
-      isDark ? 18 : 12,
-      false,
-    );
+    canvas.drawShadow(path, glow, isDark ? 18 : 12, false);
     canvas.drawPath(path, fillPaint);
     if (stroke.a > 0) {
       canvas.drawPath(path, strokePaint);

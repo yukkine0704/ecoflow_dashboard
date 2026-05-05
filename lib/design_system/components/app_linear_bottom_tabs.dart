@@ -8,20 +8,14 @@ import '../theme/theme_context.dart';
 import '../tokens/app_metrics.dart';
 
 class AppLinearTabItem {
-  const AppLinearTabItem({
-    required this.icon,
-    required this.label,
-  });
+  const AppLinearTabItem({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
 }
 
 class AppExpandedMenuItem {
-  const AppExpandedMenuItem({
-    required this.icon,
-    required this.label,
-  });
+  const AppExpandedMenuItem({required this.icon, required this.label});
 
   final IconData icon;
   final String label;
@@ -83,14 +77,20 @@ class _AppLinearBottomTabsState extends State<AppLinearBottomTabs>
     widget.onExpandChanged?.call(next);
   }
 
-  void _onVerticalDragUpdate(DragUpdateDetails details, BoxConstraints constraints) {
+  void _onVerticalDragUpdate(
+    DragUpdateDetails details,
+    BoxConstraints constraints,
+  ) {
     final delta = -details.primaryDelta! / (_expandedHeight - _minBarHeight);
     _expandController.value = (_expandController.value + delta).clamp(0.0, 1.0);
 
     if (_isExpanded && widget.expandedItems.isNotEmpty) {
       final localY = details.localPosition.dy.clamp(0, _expandedHeight);
       final itemHeight = _expandedHeight / widget.expandedItems.length;
-      final idx = (localY / itemHeight).floor().clamp(0, widget.expandedItems.length - 1);
+      final idx = (localY / itemHeight).floor().clamp(
+        0,
+        widget.expandedItems.length - 1,
+      );
       if (_hoveredExpandedIndex != idx) {
         _hoveredExpandedIndex = idx;
         HapticFeedback.selectionClick();
@@ -131,7 +131,9 @@ class _AppLinearBottomTabsState extends State<AppLinearBottomTabs>
             child: AnimatedBuilder(
               animation: _expandController,
               builder: (context, _) {
-                final t = Curves.easeOutCubic.transform(_expandController.value);
+                final t = Curves.easeOutCubic.transform(
+                  _expandController.value,
+                );
                 final height = lerpDouble(_minBarHeight, _expandedHeight, t)!;
                 final radius = lerpDouble(25, 40, t)!;
                 final tabOpacity = (1 - (t * 2)).clamp(0.0, 1.0);
@@ -151,7 +153,9 @@ class _AppLinearBottomTabsState extends State<AppLinearBottomTabs>
                           color: colors.surfaceLow,
                           borderRadius: BorderRadius.circular(radius),
                           border: Border.all(
-                            color: colors.outlineVariant.withValues(alpha: 0.28),
+                            color: colors.outlineVariant.withValues(
+                              alpha: 0.28,
+                            ),
                           ),
                         ),
                         child: Stack(
@@ -212,7 +216,10 @@ class _BaseTabs extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = context.appColors;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs, vertical: AppSpacing.xs),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.xs,
+        vertical: AppSpacing.xs,
+      ),
       child: Row(
         children: [
           for (int i = 0; i < items.length; i++)
@@ -225,7 +232,10 @@ class _BaseTabs extends StatelessWidget {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 220),
                     curve: Curves.easeOutCubic,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 8,
+                    ),
                     decoration: BoxDecoration(
                       borderRadius: AppRadius.full,
                       color: i == selectedIndex
@@ -238,16 +248,19 @@ class _BaseTabs extends StatelessWidget {
                         Icon(
                           items[i].icon,
                           size: 18,
-                          color: i == selectedIndex ? colors.onSurface : colors.onSurfaceVariant,
+                          color: i == selectedIndex
+                              ? colors.onSurface
+                              : colors.onSurfaceVariant,
                         ),
                         if (i == selectedIndex) ...[
                           const SizedBox(width: AppSpacing.xs),
                           Text(
                             items[i].label,
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: colors.onSurface,
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: Theme.of(context).textTheme.bodyMedium
+                                ?.copyWith(
+                                  color: colors.onSurface,
+                                  fontWeight: FontWeight.w700,
+                                ),
                           ),
                         ],
                       ],
@@ -308,7 +321,10 @@ class _ExpandedMenu extends StatelessWidget {
               child: GestureDetector(
                 onTap: () => onPressed(i),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: AppRadius.full,
                     color: selectedIndex == i
@@ -320,16 +336,23 @@ class _ExpandedMenu extends StatelessWidget {
                       Icon(
                         items[i].icon,
                         size: 20,
-                        color: selectedIndex == i ? colors.onSurface : colors.onSurfaceVariant,
+                        color: selectedIndex == i
+                            ? colors.onSurface
+                            : colors.onSurfaceVariant,
                       ),
                       const SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           items[i].label,
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: selectedIndex == i ? colors.onSurface : colors.onSurfaceVariant,
-                            fontWeight: selectedIndex == i ? FontWeight.w700 : FontWeight.w600,
-                          ),
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: selectedIndex == i
+                                    ? colors.onSurface
+                                    : colors.onSurfaceVariant,
+                                fontWeight: selectedIndex == i
+                                    ? FontWeight.w700
+                                    : FontWeight.w600,
+                              ),
                         ),
                       ),
                     ],

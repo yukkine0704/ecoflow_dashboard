@@ -7,10 +7,7 @@ enum AppToastPosition { topCenter, bottomCenter }
 enum AppToastBodyLayout { left, center, right, spread }
 
 class AppToastAction {
-  const AppToastAction({
-    required this.label,
-    required this.onPressed,
-  });
+  const AppToastAction({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;

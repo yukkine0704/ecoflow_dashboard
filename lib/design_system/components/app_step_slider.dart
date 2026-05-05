@@ -77,7 +77,9 @@ class _AppStepSliderState extends State<AppStepSlider>
       vsync: this,
       duration: const Duration(milliseconds: 180),
     );
-    _selectedIndex = _clampIndex(widget.defaultIndex ?? (widget.stepCount ~/ 2));
+    _selectedIndex = _clampIndex(
+      widget.defaultIndex ?? (widget.stepCount ~/ 2),
+    );
   }
 
   @override
@@ -95,7 +97,8 @@ class _AppStepSliderState extends State<AppStepSlider>
   @override
   void didUpdateWidget(covariant AppStepSlider oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.stepCount != oldWidget.stepCount && _selectedIndex >= widget.stepCount) {
+    if (widget.stepCount != oldWidget.stepCount &&
+        _selectedIndex >= widget.stepCount) {
       _selectedIndex = widget.stepCount - 1;
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,7 +130,8 @@ class _AppStepSliderState extends State<AppStepSlider>
   double get _thumbHeight => widget.thumbHeight ?? (_trackHeight * 0.62);
   double get _paddingStart => widget.stepPaddingStart ?? _trackRadius;
   double get _paddingEnd => widget.stepPaddingEnd ?? _trackRadius;
-  double get _dotStep => (_trackWidth - _paddingStart - _paddingEnd) / (widget.stepCount - 1);
+  double get _dotStep =>
+      (_trackWidth - _paddingStart - _paddingEnd) / (widget.stepCount - 1);
   double get _minX => _paddingStart;
   double get _maxX => _trackWidth - _paddingEnd;
 
@@ -157,12 +161,19 @@ class _AppStepSliderState extends State<AppStepSlider>
   Widget build(BuildContext context) {
     final colors = context.appColors;
     final palette = _StepSliderPalette(
-      track: widget.theme?.track ?? colors.secondaryContainer.withValues(alpha: 0.28),
-      fill: widget.theme?.fill ?? colors.secondaryContainer.withValues(alpha: 0.6),
+      track:
+          widget.theme?.track ??
+          colors.secondaryContainer.withValues(alpha: 0.28),
+      fill:
+          widget.theme?.fill ??
+          colors.secondaryContainer.withValues(alpha: 0.6),
       stepActive: widget.theme?.stepActive ?? colors.primary,
-      stepInactive: widget.theme?.stepInactive ?? colors.secondary.withValues(alpha: 0.55),
+      stepInactive:
+          widget.theme?.stepInactive ??
+          colors.secondary.withValues(alpha: 0.55),
       thumb: widget.theme?.thumb ?? colors.primary,
-      thumbShadow: widget.theme?.thumbShadow ?? colors.primary.withValues(alpha: 0.45),
+      thumbShadow:
+          widget.theme?.thumbShadow ?? colors.primary.withValues(alpha: 0.45),
     );
 
     return SizedBox(
@@ -174,12 +185,17 @@ class _AppStepSliderState extends State<AppStepSlider>
           _dragController.forward();
         },
         onHorizontalDragUpdate: (details) {
-          final current = (_thumbController.value + details.delta.dx).clamp(_minX, _maxX);
+          final current = (_thumbController.value + details.delta.dx).clamp(
+            _minX,
+            _maxX,
+          );
           _thumbController.value = current;
         },
         onHorizontalDragEnd: (_) {
           _dragController.reverse();
-          _animateThumbToIndex(_nearestIndexForPosition(_thumbController.value));
+          _animateThumbToIndex(
+            _nearestIndexForPosition(_thumbController.value),
+          );
         },
         onTapDown: (details) {
           final localX = details.localPosition.dx.clamp(_minX, _maxX);
@@ -193,10 +209,11 @@ class _AppStepSliderState extends State<AppStepSlider>
                 ? _thumbController.value.clamp(_minX, _maxX)
                 : _positionForIndex(_selectedIndex);
             final dragT = _dragController.value;
-            final progressW = (thumbX >= _maxX - (_dotStep / 2)
-                ? _trackWidth
-                : (thumbX + (_dotStep / 2)).clamp(0, _trackWidth))
-                .toDouble();
+            final progressW =
+                (thumbX >= _maxX - (_dotStep / 2)
+                        ? _trackWidth
+                        : (thumbX + (_dotStep / 2)).clamp(0, _trackWidth))
+                    .toDouble();
 
             return CustomPaint(
               painter: _StepSliderPainter(
@@ -296,10 +313,14 @@ class _StepSliderPainter extends CustomPainter {
     for (int i = 0; i < stepCount; i++) {
       final cx = stepStart + (stepGap * i);
       final dist = (cx - thumbX).abs();
-      final pulse = (1.3 - ((dist / stepGap).clamp(0.0, 1.0) * 0.3)).clamp(1.0, 1.3);
+      final pulse = (1.3 - ((dist / stepGap).clamp(0.0, 1.0) * 0.3)).clamp(
+        1.0,
+        1.3,
+      );
       final r = stepRadius * pulse;
       final active = cx <= thumbX;
-      final stepPaint = Paint()..color = active ? palette.stepActive : palette.stepInactive;
+      final stepPaint = Paint()
+        ..color = active ? palette.stepActive : palette.stepInactive;
       _drawStep(canvas, Offset(cx, centerY), r, stepPaint);
     }
 
@@ -316,8 +337,13 @@ class _StepSliderPainter extends CustomPainter {
     );
 
     final shadowPaint = Paint()
-      ..color = palette.thumbShadow.withValues(alpha: lerpDouble(0.35, 0.55, dragT)!)
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, lerpDouble(2, 10, dragT)!);
+      ..color = palette.thumbShadow.withValues(
+        alpha: lerpDouble(0.35, 0.55, dragT)!,
+      )
+      ..maskFilter = MaskFilter.blur(
+        BlurStyle.normal,
+        lerpDouble(2, 10, dragT)!,
+      );
     canvas.drawRRect(thumbRRect.shift(const Offset(0, 1)), shadowPaint);
 
     final thumbPaint = Paint()..color = palette.thumb;

@@ -21,14 +21,8 @@ class BridgeRepository {
 
   static const Map<String, ({String displayName, String model})>
   _directModeDeviceAliases = <String, ({String displayName, String model})>{
-    'P351ZAHAPH2R2706': (
-      displayName: 'Delta 3 Pro',
-      model: 'Delta 3',
-    ),
-    'R651ZAB5XH111262': (
-      displayName: 'River 3',
-      model: 'River',
-    ),
+    'P351ZAHAPH2R2706': (displayName: 'Delta 3 Pro', model: 'Delta 3'),
+    'R651ZAB5XH111262': (displayName: 'River 3', model: 'River'),
   };
   static const Set<String> _preferSocBatteryDeviceIds = <String>{
     'R651ZAB5XH111262',
@@ -394,7 +388,10 @@ class BridgeRepository {
     if (alias == null) {
       return snapshot;
     }
-    return snapshot.copyWith(displayName: alias.displayName, model: alias.model);
+    return snapshot.copyWith(
+      displayName: alias.displayName,
+      model: alias.model,
+    );
   }
 
   BridgeCatalogItem _applyCatalogAlias(BridgeCatalogItem item) {
@@ -426,7 +423,12 @@ class BridgeRepository {
     if (metrics == null || metrics.isEmpty) {
       return null;
     }
-    const socKeys = <String>['pd.soc', 'bms.soc', 'pd.bmsBattSoc', 'pd.cmsBattSoc'];
+    const socKeys = <String>[
+      'pd.soc',
+      'bms.soc',
+      'pd.bmsBattSoc',
+      'pd.cmsBattSoc',
+    ];
     for (final key in socKeys) {
       final raw = metrics[key];
       final parsed = _asRoundedInt(raw);

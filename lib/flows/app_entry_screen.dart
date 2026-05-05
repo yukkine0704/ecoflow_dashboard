@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../core/bridge/bridge_settings_storage.dart';
+import '../core/ecoflow/ecoflow_settings_storage.dart';
 import 'onboarding_flow.dart';
 import 'settings_screen.dart';
 
@@ -19,23 +19,23 @@ class AppEntryScreen extends StatefulWidget {
 }
 
 class _AppEntryScreenState extends State<AppEntryScreen> {
-  final BridgeSettingsStorage _settingsStorage = BridgeSettingsStorage();
+  final EcoFlowSettingsStorage _settingsStorage = EcoFlowSettingsStorage();
   bool _loading = true;
-  String? _wsUrl;
+  bool _hasCredentials = false;
 
   @override
   void initState() {
     super.initState();
-    _loadStoredWsUrl();
+    _loadStoredCredentials();
   }
 
-  Future<void> _loadStoredWsUrl() async {
-    final wsUrl = await _settingsStorage.readStoredWsUrlOrNull();
+  Future<void> _loadStoredCredentials() async {
+    final credentials = await _settingsStorage.readCredentialsOrNull();
     if (!mounted) {
       return;
     }
     setState(() {
-      _wsUrl = wsUrl;
+      _hasCredentials = credentials != null;
       _loading = false;
     });
   }
@@ -46,9 +46,8 @@ class _AppEntryScreenState extends State<AppEntryScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    if (_wsUrl != null && _wsUrl!.isNotEmpty) {
+    if (_hasCredentials) {
       return DeviceSelectorScreen(
-        wsUrl: _wsUrl!,
         themeMode: widget.themeMode,
         onThemeModeChanged: widget.onThemeModeChanged,
       );
@@ -59,7 +58,7 @@ class _AppEntryScreenState extends State<AppEntryScreen> {
       onThemeModeChanged: widget.onThemeModeChanged,
       onSaved: (result) {
         setState(() {
-          _wsUrl = result.wsUrl;
+          _hasCredentials = result.saved;
         });
       },
     );

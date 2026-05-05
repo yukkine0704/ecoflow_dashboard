@@ -19,10 +19,13 @@ dependencies:
   google_fonts: ^8.0.2
   hive: ^2.2.3
   hive_flutter: ^1.1.0
+  http: ^1.6.0
   iconsax_flutter: ^1.0.1
   intl: ^0.20.2
   logger: ^2.7.0
+  mqtt_client: ^10.11.11
   package_info_plus: ^9.0.1
+  crypto: ^3.0.7
   riverpod_annotation: ^4.0.2
   syncfusion_flutter_gauges: ^33.1.49
   web_socket_channel: ^3.0.3

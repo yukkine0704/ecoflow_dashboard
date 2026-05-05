@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/bridge/bridge_models.dart';
+import '../../core/ecoflow/ecoflow_models.dart';
 import '../../design_system/design_system.dart';
 
 class DeviceSelectionCard extends StatelessWidget {
@@ -11,7 +11,7 @@ class DeviceSelectionCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final BridgeDeviceSnapshot device;
+  final EcoFlowDeviceSnapshot device;
   final bool selected;
   final VoidCallback onTap;
   static const Map<String, String> _deviceImageAssetsById = <String, String>{
@@ -28,14 +28,14 @@ class DeviceSelectionCard extends StatelessWidget {
     final connectivity = device.connectivity;
     final batteryValue = battery == null ? 0.0 : battery.clamp(0, 100) / 100.0;
     final statusLabel = switch (connectivity) {
-      BridgeConnectivity.online => 'Online',
-      BridgeConnectivity.assumeOffline => 'Assume offline',
-      BridgeConnectivity.offline => 'Offline',
+      EcoFlowConnectivity.online => 'Online',
+      EcoFlowConnectivity.assumeOffline => 'Assume offline',
+      EcoFlowConnectivity.offline => 'Offline',
     };
     final statusTone = switch (connectivity) {
-      BridgeConnectivity.online => AppStatusTone.active,
-      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
-      BridgeConnectivity.offline => AppStatusTone.danger,
+      EcoFlowConnectivity.online => AppStatusTone.active,
+      EcoFlowConnectivity.assumeOffline => AppStatusTone.warning,
+      EcoFlowConnectivity.offline => AppStatusTone.danger,
     };
     final estimateLabel = _estimateLabel(device, battery);
     final localAssetImagePath = _deviceImageAssetsById[device.deviceId];
@@ -52,18 +52,22 @@ class DeviceSelectionCard extends StatelessWidget {
                   fit: isMobile ? BoxFit.cover : BoxFit.contain,
                 )
               : (device.imageUrl == null
-              ? Container(
-                  color: colors.primaryContainer.withValues(alpha: 0.32),
-                  child: const Icon(Icons.battery_charging_full_rounded),
-                )
-              : Image.network(
-                  device.imageUrl!,
-                  fit: isMobile ? BoxFit.cover : BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    color: colors.primaryContainer.withValues(alpha: 0.32),
-                    child: const Icon(Icons.battery_charging_full_rounded),
-                  ),
-                )),
+                    ? Container(
+                        color: colors.primaryContainer.withValues(alpha: 0.32),
+                        child: const Icon(Icons.battery_charging_full_rounded),
+                      )
+                    : Image.network(
+                        device.imageUrl!,
+                        fit: isMobile ? BoxFit.cover : BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: colors.primaryContainer.withValues(
+                            alpha: 0.32,
+                          ),
+                          child: const Icon(
+                            Icons.battery_charging_full_rounded,
+                          ),
+                        ),
+                      )),
         ),
       );
     }
@@ -182,8 +186,8 @@ class DeviceSelectionCard extends StatelessWidget {
     );
   }
 
-  String _estimateLabel(BridgeDeviceSnapshot device, int? battery) {
-    if (device.connectivity == BridgeConnectivity.offline) {
+  String _estimateLabel(EcoFlowDeviceSnapshot device, int? battery) {
+    if (device.connectivity == EcoFlowConnectivity.offline) {
       return 'Disconnected';
     }
     if (battery == null) {

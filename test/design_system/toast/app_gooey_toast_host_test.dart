@@ -94,7 +94,9 @@ void main() {
     expect(find.text('Timer second'), findsNothing);
   });
 
-  testWidgets('renders spread body layout meta and description', (tester) async {
+  testWidgets('renders spread body layout meta and description', (
+    tester,
+  ) async {
     await pumpHost(tester);
 
     appGooeyToast.show(

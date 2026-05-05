@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:hive_flutter/hive_flutter.dart';
 
-import 'bridge_models.dart';
+import 'ecoflow_models.dart';
 
 class DeviceHistoryPoint {
   const DeviceHistoryPoint({
@@ -51,9 +51,7 @@ class DeviceHistoryPoint {
     DateTime parseTimestamp(Object? value) {
       if (value is String) {
         final parsed = DateTime.tryParse(value);
-        if (parsed != null) {
-          return parsed;
-        }
+        if (parsed != null) return parsed;
       }
       return DateTime.now();
     }
@@ -96,11 +94,11 @@ class DeviceHistorySeries {
   final List<DeviceHistoryPoint> points;
 }
 
-class BridgeHistoryStore {
-  BridgeHistoryStore({
+class EcoFlowHistoryStore {
+  EcoFlowHistoryStore({
     Duration retention = const Duration(days: 7),
     Duration sampleWindow = const Duration(seconds: 30),
-    String boxName = 'bridge_device_history_v1',
+    String boxName = 'ecoflow_device_history_v1',
   }) : _retention = retention,
        _sampleWindow = sampleWindow,
        _boxName = boxName;
@@ -113,9 +111,7 @@ class BridgeHistoryStore {
   Box<dynamic>? _box;
 
   Future<void> init() async {
-    if (_box?.isOpen == true) {
-      return;
-    }
+    if (_box?.isOpen == true) return;
     _box = await Hive.openBox<dynamic>(_boxName);
   }
 
@@ -145,7 +141,7 @@ class BridgeHistoryStore {
     return controller.stream;
   }
 
-  Future<void> recordSnapshot(BridgeDeviceSnapshot snapshot) async {
+  Future<void> recordSnapshot(EcoFlowDeviceSnapshot snapshot) async {
     await init();
     final now = snapshot.updatedAt;
     final cutoff = now.subtract(_retention);
@@ -176,7 +172,7 @@ class BridgeHistoryStore {
     _emit(snapshot.deviceId, points);
   }
 
-  DeviceHistoryPoint _pointFromSnapshot(BridgeDeviceSnapshot snapshot) {
+  DeviceHistoryPoint _pointFromSnapshot(EcoFlowDeviceSnapshot snapshot) {
     double? metricAsDouble(String key) {
       final raw = snapshot.metrics[key];
       if (raw is num) return raw.toDouble();
@@ -202,9 +198,7 @@ class BridgeHistoryStore {
 
   List<DeviceHistoryPoint> _readPoints(String deviceId) {
     final raw = _box?.get(deviceId);
-    if (raw is! List) {
-      return const <DeviceHistoryPoint>[];
-    }
+    if (raw is! List) return const <DeviceHistoryPoint>[];
     final points = <DeviceHistoryPoint>[];
     for (final item in raw) {
       if (item is Map) {
@@ -220,9 +214,7 @@ class BridgeHistoryStore {
 
   void _emit(String deviceId, List<DeviceHistoryPoint> points) {
     final controller = _controllers[deviceId];
-    if (controller == null || controller.isClosed) {
-      return;
-    }
+    if (controller == null || controller.isClosed) return;
     controller.add(DeviceHistorySeries(deviceId: deviceId, points: points));
   }
 }

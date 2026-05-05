@@ -1,13 +1,14 @@
 # ecoflow_dashboard
 
-Dashboard Flutter conectado a un bridge local (`ioBroker.ecoflow-mqtt` -> MQTT HA topics -> WebSocket).
+Dashboard Flutter conectado directamente a EcoFlow Cloud desde Android/iOS.
 
-## Configuración
+## Configuracion
 
-1. Levanta el bridge Node/TS en `./bridge`.
-2. Abre la app y configura `Bridge WebSocket URL` (ej. `ws://127.0.0.1:8787/ws`).
-3. Conecta y monitorea tus dispositivos.
+1. Abre la app y configura email/password de EcoFlow.
+2. Agrega tus `accessKey` y `secretKey` de EcoFlow Open API.
+3. La app descubre el catalogo, conecta MQTT y muestra telemetria en vivo.
+4. Selecciona un dispositivo para revisar metricas principales y campos raw.
 
-## Bridge
+## Bridge legacy
 
-Ver `./bridge/README.md`.
+El bridge Node/TS en `./bridge` queda como referencia temporal para comparar paridad durante la migracion.

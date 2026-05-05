@@ -14,7 +14,7 @@ class DesignSystemTestView extends StatelessWidget {
         children: const [
           AppCard(
             child: Text(
-              'Vista de pruebas simplificada.\nLa telemetría ahora se consume desde Bridge WS.',
+              'Vista de pruebas simplificada.\nLa telemetría ahora se consume en modo EcoFlow directo.',
             ),
           ),
         ],

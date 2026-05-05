@@ -5,9 +5,9 @@ import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../core/bridge/bridge_history_store.dart';
-import '../core/bridge/bridge_models.dart';
-import '../core/bridge/bridge_repository.dart';
+import '../core/ecoflow/device_telemetry_repository.dart';
+import '../core/ecoflow/ecoflow_history_store.dart';
+import '../core/ecoflow/ecoflow_models.dart';
 import '../design_system/design_system.dart';
 
 class DeviceDetailScreen extends StatefulWidget {
@@ -18,9 +18,9 @@ class DeviceDetailScreen extends StatefulWidget {
     required this.initialSnapshot,
   });
 
-  final BridgeRepository repository;
+  final DeviceTelemetryRepository repository;
   final String deviceId;
-  final BridgeDeviceSnapshot initialSnapshot;
+  final EcoFlowDeviceSnapshot initialSnapshot;
 
   @override
   State<DeviceDetailScreen> createState() => _DeviceDetailScreenState();
@@ -33,8 +33,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     'R651ZAB5XH111262': 'assets/River-3.png',
   };
 
-  late BridgeDeviceSnapshot _snapshot;
-  StreamSubscription<BridgeDeviceSnapshot>? _deviceSub;
+  late EcoFlowDeviceSnapshot _snapshot;
+  StreamSubscription<EcoFlowDeviceSnapshot>? _deviceSub;
   StreamSubscription<DeviceHistorySeries>? _historySub;
   late final AnimationController _thermalController;
   DeviceHistorySeries? _historySeries;
@@ -587,7 +587,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   String _estimateLabel() {
     final battery = _snapshot.batteryPercent;
-    if (_snapshot.connectivity == BridgeConnectivity.offline) {
+    if (_snapshot.connectivity == EcoFlowConnectivity.offline) {
       return 'Disconnected';
     }
     if (battery == null) {
@@ -606,17 +606,17 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   AppStatusTone _connectivityTone() {
     return switch (_snapshot.connectivity) {
-      BridgeConnectivity.online => AppStatusTone.active,
-      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
-      BridgeConnectivity.offline => AppStatusTone.danger,
+      EcoFlowConnectivity.online => AppStatusTone.active,
+      EcoFlowConnectivity.assumeOffline => AppStatusTone.warning,
+      EcoFlowConnectivity.offline => AppStatusTone.danger,
     };
   }
 
   String _connectivityLabel() {
     return switch (_snapshot.connectivity) {
-      BridgeConnectivity.online => 'Online',
-      BridgeConnectivity.assumeOffline => 'Assume offline',
-      BridgeConnectivity.offline => 'Offline',
+      EcoFlowConnectivity.online => 'Online',
+      EcoFlowConnectivity.assumeOffline => 'Assume offline',
+      EcoFlowConnectivity.offline => 'Offline',
     };
   }
 
@@ -1608,7 +1608,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 Text(
-                  'Todos los campos recibidos del bridge para este dispositivo.',
+                  'Todos los campos recibidos de EcoFlow para este dispositivo.',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.md),

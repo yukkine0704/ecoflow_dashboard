@@ -73,11 +73,15 @@ class _FakeHistoryStore extends BridgeHistoryStore {
 
   @override
   Future<DeviceHistorySeries> readSeries(String deviceId) async {
-    return DeviceHistorySeries(deviceId: deviceId, points: const <DeviceHistoryPoint>[]);
+    return DeviceHistorySeries(
+      deviceId: deviceId,
+      points: const <DeviceHistoryPoint>[],
+    );
   }
 
   @override
-  Stream<DeviceHistorySeries> watchSeries(String deviceId) => _controller.stream;
+  Stream<DeviceHistorySeries> watchSeries(String deviceId) =>
+      _controller.stream;
 
   @override
   Future<void> dispose() async {
@@ -90,7 +94,10 @@ void main() {
   test('applies v2 connectivity over legacy online in mixed frames', () async {
     final fakeClient = _FakeBridgeWsClient();
     final historyStore = _FakeHistoryStore();
-    final repo = BridgeRepository(client: fakeClient, historyStore: historyStore);
+    final repo = BridgeRepository(
+      client: fakeClient,
+      historyStore: historyStore,
+    );
     final fleetEvents = <List<BridgeDeviceSnapshot>>[];
     final fleetSub = repo.fleet.listen(fleetEvents.add);
 
@@ -118,10 +125,7 @@ void main() {
       'event': 'device_delta',
       'payload': <String, dynamic>{
         'deviceId': 'D1',
-        'changed': <String, dynamic>{
-          'connectivity': 'offline',
-          'online': true,
-        },
+        'changed': <String, dynamic>{'connectivity': 'offline', 'online': true},
       },
     });
 
@@ -137,7 +141,10 @@ void main() {
   test('records history from snapshot and delta frames', () async {
     final fakeClient = _FakeBridgeWsClient();
     final historyStore = _FakeHistoryStore();
-    final repo = BridgeRepository(client: fakeClient, historyStore: historyStore);
+    final repo = BridgeRepository(
+      client: fakeClient,
+      historyStore: historyStore,
+    );
 
     await repo.connect('ws://localhost:8787/ws');
 

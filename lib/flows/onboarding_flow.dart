@@ -2,234 +2,25 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../core/bridge/bridge_models.dart';
-import '../core/bridge/bridge_repository.dart';
-import '../core/bridge/bridge_settings_storage.dart';
+import '../core/ecoflow/ecoflow_direct_repository.dart';
+import '../core/ecoflow/ecoflow_models.dart';
 import '../design_system/design_system.dart';
 import 'device_detail_screen.dart';
 import 'settings_screen.dart';
 import 'widgets/device_selection_card.dart';
 
-class ApiConfigurationScreen extends StatefulWidget {
+class ApiConfigurationScreen extends StatelessWidget {
   const ApiConfigurationScreen({super.key});
 
   @override
-  State<ApiConfigurationScreen> createState() => _ApiConfigurationScreenState();
-}
-
-class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
-  final _wsUrlController = TextEditingController();
-  final _settingsStorage = BridgeSettingsStorage();
-
-  bool _loading = true;
-  bool _saving = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadStoredData();
-  }
-
-  @override
-  void dispose() {
-    _wsUrlController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _loadStoredData() async {
-    try {
-      final wsUrl = await _settingsStorage.readWsUrl();
-      if (!mounted) {
-        return;
-      }
-      _wsUrlController.text = wsUrl;
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      appGooeyToast.warning(
-        'We could not load your connection settings',
-        config: const AppToastConfig(meta: 'BRIDGE WS'),
-      );
-      _wsUrlController.text = 'ws://127.0.0.1:8787/ws';
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
-      }
-    }
-  }
-
-  String? _validateWsUrl() {
-    final candidate = _wsUrlController.text.trim();
-    if (candidate.isEmpty) {
-      return 'Enter your bridge WebSocket URL.';
-    }
-    final uri = Uri.tryParse(candidate);
-    if (uri == null || !uri.hasScheme || uri.host.isEmpty) {
-      return 'This URL format does not look valid.';
-    }
-    if (uri.scheme != 'ws' && uri.scheme != 'wss') {
-      return 'Use a URL that starts with ws:// or wss://.';
-    }
-    return null;
-  }
-
-  Future<bool> _saveConfiguration() async {
-    final error = _validateWsUrl();
-    if (error != null) {
-      appGooeyToast.error(
-        'Connection URL needed',
-        config: AppToastConfig(description: error, meta: 'BRIDGE WS'),
-      );
-      return false;
-    }
-    if (_saving) {
-      return false;
-    }
-
-    setState(() => _saving = true);
-    try {
-      await _settingsStorage.writeWsUrl(_wsUrlController.text.trim());
-      if (!mounted) {
-        return true;
-      }
-      appGooeyToast.success(
-        'Connection saved',
-        config: const AppToastConfig(meta: 'BRIDGE WS'),
-      );
-      return true;
-    } catch (error) {
-      if (mounted) {
-        appGooeyToast.error(
-          'Could not save settings',
-          config: AppToastConfig(description: '$error', meta: 'BRIDGE WS'),
-        );
-      }
-      return false;
-    } finally {
-      if (mounted) {
-        setState(() => _saving = false);
-      }
-    }
-  }
-
-  Future<void> _continueToSelector() async {
-    final ok = await _saveConfiguration();
-    if (!ok || !mounted) {
-      return;
-    }
-
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (_) => DeviceSelectorScreen(wsUrl: _wsUrlController.text.trim()),
-      ),
-    );
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Get Started')),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-        children: [
-          AppCard(
-            surfaceLevel: 1,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Bring your EcoFlow devices to life',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Connect once, then monitor your devices in real time from one place.',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                AppStatusBadge(
-                  label: 'Step 1 of 2: Bridge connection',
-                  tone: AppStatusTone.neutral,
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                if (_loading)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.md),
-                    child: Text(
-                      'Loading your saved connection...',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  ),
-                AppTextField(
-                  controller: _wsUrlController,
-                  label: 'Connection URL',
-                  hintText: 'ws://127.0.0.1:8787/ws',
-                  prefixIcon: Icons.wifi_tethering,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text(
-                  'Tip: keep your local bridge running before you continue.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                const SizedBox(height: AppSpacing.md),
-                ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  childrenPadding: EdgeInsets.zero,
-                  title: Text(
-                    'Advanced settings',
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  subtitle: Text(
-                    'Technical details and protocol requirements',
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                  children: [
-                    AppCard(
-                      surfaceLevel: 2,
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Accepted protocol: ws:// or wss://',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            'Default local endpoint: ws://127.0.0.1:8787/ws',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          const SizedBox(height: AppSpacing.xs),
-                          Text(
-                            'If connection fails, verify bridge availability and firewall permissions.',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.lg),
-                AppButton(
-                  label: 'Connect and continue',
-                  fullWidth: true,
-                  trailing: const Icon(Icons.arrow_forward),
-                  loading: _saving,
-                  onPressed: _saving ? null : _continueToSelector,
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                AppButton(
-                  label: 'Save for later',
-                  variant: AppButtonVariant.secondary,
-                  fullWidth: true,
-                  onPressed: _saving ? null : _saveConfiguration,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return SettingsScreen(
+      onSaved: (result) {
+        if (!result.saved) return;
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute<void>(builder: (_) => const DeviceSelectorScreen()),
+        );
+      },
     );
   }
 }
@@ -237,12 +28,10 @@ class _ApiConfigurationScreenState extends State<ApiConfigurationScreen> {
 class DeviceSelectorScreen extends StatefulWidget {
   const DeviceSelectorScreen({
     super.key,
-    required this.wsUrl,
     this.themeMode,
     this.onThemeModeChanged,
   });
 
-  final String wsUrl;
   final ThemeMode? themeMode;
   final ValueChanged<ThemeMode>? onThemeModeChanged;
 
@@ -251,27 +40,24 @@ class DeviceSelectorScreen extends StatefulWidget {
 }
 
 class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
-  final BridgeRepository _repository = BridgeRepository();
-  StreamSubscription<List<BridgeDeviceSnapshot>>? _fleetSub;
-  StreamSubscription<BridgeConnectionState>? _connectionSub;
-  StreamSubscription<List<BridgeCatalogItem>>? _catalogSub;
+  final EcoFlowDirectRepository _repository = EcoFlowDirectRepository();
+  StreamSubscription<List<EcoFlowDeviceSnapshot>>? _fleetSub;
+  StreamSubscription<EcoFlowConnectionState>? _connectionSub;
+  StreamSubscription<List<EcoFlowCatalogItem>>? _catalogSub;
 
-  List<BridgeDeviceSnapshot> _devices = const <BridgeDeviceSnapshot>[];
-  List<BridgeCatalogItem> _catalog = const <BridgeCatalogItem>[];
+  List<EcoFlowDeviceSnapshot> _devices = const <EcoFlowDeviceSnapshot>[];
+  List<EcoFlowCatalogItem> _catalog = const <EcoFlowCatalogItem>[];
   final Set<String> _visibleDeviceIds = <String>{};
   bool _loading = true;
   String? _error;
   String? _selectedDeviceId;
-  BridgeConnectionState _connectionState = const BridgeConnectionState(
-    status: BridgeConnectionStatus.disconnected,
+  EcoFlowConnectionState _connectionState = const EcoFlowConnectionState(
+    status: EcoFlowConnectionStatus.disconnected,
     message: 'Disconnected',
   );
-  late String _wsUrl;
-
   @override
   void initState() {
     super.initState();
-    _wsUrl = widget.wsUrl;
     _connect();
   }
 
@@ -300,7 +86,9 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
           _visibleDeviceIds.addAll(fleet.map((device) => device.deviceId));
         }
         final filtered = _filteredDevices(fleet);
-        _selectedDeviceId ??= filtered.isNotEmpty ? filtered.first.deviceId : null;
+        _selectedDeviceId ??= filtered.isNotEmpty
+            ? filtered.first.deviceId
+            : null;
         _loading = false;
       });
     });
@@ -323,7 +111,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
       }
       setState(() {
         _connectionState = state;
-        if (state.status == BridgeConnectionStatus.error) {
+        if (state.status == EcoFlowConnectionStatus.error) {
           _error = state.message;
           _loading = false;
         }
@@ -331,7 +119,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     });
 
     try {
-      await _repository.connect(_wsUrl);
+      await _repository.connect();
     } catch (error) {
       if (!mounted) {
         return;
@@ -343,7 +131,7 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     }
   }
 
-  Future<void> _openDeviceDetail(BridgeDeviceSnapshot device) async {
+  Future<void> _openDeviceDetail(EcoFlowDeviceSnapshot device) async {
     setState(() => _selectedDeviceId = device.deviceId);
     await Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -365,7 +153,6 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
         builder: (_) => SettingsScreen(
-          initialWsUrl: _wsUrl,
           initialThemeMode: widget.themeMode,
           allowReconnect: true,
           onThemeModeChanged: widget.onThemeModeChanged,
@@ -375,34 +162,35 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     if (!mounted || result == null || !result.saved) {
       return;
     }
-    setState(() {
-      _wsUrl = result.wsUrl;
-    });
     if (result.reconnectRequested) {
       await _reconnect();
     }
   }
 
-  List<BridgeDeviceSnapshot> _filteredDevices(List<BridgeDeviceSnapshot> source) {
+  List<EcoFlowDeviceSnapshot> _filteredDevices(
+    List<EcoFlowDeviceSnapshot> source,
+  ) {
     if (_visibleDeviceIds.isEmpty) {
       return source;
     }
-    return source.where((device) => _visibleDeviceIds.contains(device.deviceId)).toList();
+    return source
+        .where((device) => _visibleDeviceIds.contains(device.deviceId))
+        .toList();
   }
 
   Future<void> _openDevicePicker() async {
     final source = _catalog.isNotEmpty
         ? _catalog
         : _devices
-            .map(
-              (device) => BridgeCatalogItem(
-                deviceId: device.deviceId,
-                displayName: device.displayName,
-                model: device.model,
-                imageUrl: device.imageUrl,
-              ),
-            )
-            .toList();
+              .map(
+                (device) => EcoFlowCatalogItem(
+                  deviceId: device.deviceId,
+                  displayName: device.displayName,
+                  model: device.model,
+                  imageUrl: device.imageUrl,
+                ),
+              )
+              .toList();
 
     if (source.isEmpty) {
       appGooeyToast.warning(
@@ -413,7 +201,9 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     }
 
     final workingSet = Set<String>.from(
-      _visibleDeviceIds.isEmpty ? source.map((item) => item.deviceId) : _visibleDeviceIds,
+      _visibleDeviceIds.isEmpty
+          ? source.map((item) => item.deviceId)
+          : _visibleDeviceIds,
     );
 
     await showModalBottomSheet<void>(
@@ -496,7 +286,9 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                                   ..addAll(workingSet);
                                 final filtered = _filteredDevices(_devices);
                                 if (filtered.isNotEmpty &&
-                                    !_visibleDeviceIds.contains(_selectedDeviceId)) {
+                                    !_visibleDeviceIds.contains(
+                                      _selectedDeviceId,
+                                    )) {
                                   _selectedDeviceId = filtered.first.deviceId;
                                 }
                               });
@@ -516,29 +308,29 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
     );
   }
 
-  AppStatusTone _toneFromConnection(BridgeConnectionStatus status) {
+  AppStatusTone _toneFromConnection(EcoFlowConnectionStatus status) {
     switch (status) {
-      case BridgeConnectionStatus.connected:
+      case EcoFlowConnectionStatus.connected:
         return AppStatusTone.active;
-      case BridgeConnectionStatus.connecting:
+      case EcoFlowConnectionStatus.connecting:
         return AppStatusTone.neutral;
-      case BridgeConnectionStatus.error:
+      case EcoFlowConnectionStatus.error:
         return AppStatusTone.warning;
-      case BridgeConnectionStatus.disconnected:
+      case EcoFlowConnectionStatus.disconnected:
         return AppStatusTone.warning;
     }
   }
 
-  String _labelFromConnection(BridgeConnectionStatus status) {
+  String _labelFromConnection(EcoFlowConnectionStatus status) {
     switch (status) {
-      case BridgeConnectionStatus.connected:
-        return 'Connected to bridge';
-      case BridgeConnectionStatus.connecting:
-        return 'Connecting to bridge...';
-      case BridgeConnectionStatus.error:
+      case EcoFlowConnectionStatus.connected:
+        return 'Connected to EcoFlow';
+      case EcoFlowConnectionStatus.connecting:
+        return 'Connecting to EcoFlow...';
+      case EcoFlowConnectionStatus.error:
         return 'Connection issue';
-      case BridgeConnectionStatus.disconnected:
-        return 'Bridge disconnected';
+      case EcoFlowConnectionStatus.disconnected:
+        return 'EcoFlow disconnected';
     }
   }
 
@@ -594,9 +386,9 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
           ),
           Text(
             'Manage and monitor your power grid.',
-            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-              color: colors.onSurfaceVariant,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(color: colors.onSurfaceVariant),
           ),
           const SizedBox(height: AppSpacing.md),
           AppButton(
@@ -648,12 +440,12 @@ class _DeviceSelectorScreenState extends State<DeviceSelectorScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'We could not reach your bridge',
+                    'We could not reach EcoFlow',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),
                   Text(
-                    'Check your bridge and network, then try reconnecting.',
+                    'Check your credentials and network, then try reconnecting.',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),

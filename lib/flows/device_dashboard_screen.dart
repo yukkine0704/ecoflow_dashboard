@@ -3,39 +3,34 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
-import '../core/bridge/bridge_models.dart';
-import '../core/bridge/bridge_repository.dart';
+import '../core/ecoflow/ecoflow_direct_repository.dart';
+import '../core/ecoflow/ecoflow_models.dart';
 import '../design_system/design_system.dart';
 import 'settings_screen.dart';
 
 class DeviceDashboardScreen extends StatefulWidget {
-  const DeviceDashboardScreen({super.key, required this.wsUrl});
-
-  final String wsUrl;
+  const DeviceDashboardScreen({super.key});
 
   @override
   State<DeviceDashboardScreen> createState() => _DeviceDashboardScreenState();
 }
 
 class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
-  final BridgeRepository _repository = BridgeRepository();
-  StreamSubscription<List<BridgeDeviceSnapshot>>? _fleetSub;
-  StreamSubscription<BridgeConnectionState>? _connectionSub;
+  final EcoFlowDirectRepository _repository = EcoFlowDirectRepository();
+  StreamSubscription<List<EcoFlowDeviceSnapshot>>? _fleetSub;
+  StreamSubscription<EcoFlowConnectionState>? _connectionSub;
 
-  List<BridgeDeviceSnapshot> _devices = const <BridgeDeviceSnapshot>[];
-  BridgeDeviceSnapshot? _selected;
+  List<EcoFlowDeviceSnapshot> _devices = const <EcoFlowDeviceSnapshot>[];
+  EcoFlowDeviceSnapshot? _selected;
   bool _loading = true;
   String? _error;
-  BridgeConnectionState _connectionState = const BridgeConnectionState(
-    status: BridgeConnectionStatus.disconnected,
+  EcoFlowConnectionState _connectionState = const EcoFlowConnectionState(
+    status: EcoFlowConnectionStatus.disconnected,
     message: 'Desconectado',
   );
-  late String _wsUrl;
-
   @override
   void initState() {
     super.initState();
-    _wsUrl = widget.wsUrl;
     _connect();
   }
 
@@ -60,9 +55,14 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
         if (_selected == null && fleet.isNotEmpty) {
           _selected = fleet.first;
         } else if (_selected != null) {
-          _selected = fleet
-              .where((d) => d.deviceId == _selected!.deviceId)
-              .firstOrNull;
+          EcoFlowDeviceSnapshot? nextSelected;
+          for (final device in fleet) {
+            if (device.deviceId == _selected!.deviceId) {
+              nextSelected = device;
+              break;
+            }
+          }
+          _selected = nextSelected;
         }
         _loading = false;
       });
@@ -72,7 +72,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
       if (!mounted) return;
       setState(() {
         _connectionState = state;
-        if (state.status == BridgeConnectionStatus.error) {
+        if (state.status == EcoFlowConnectionStatus.error) {
           _error = state.message;
           _loading = false;
         }
@@ -80,7 +80,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     });
 
     try {
-      await _repository.connect(_wsUrl);
+      await _repository.connect();
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -98,22 +98,17 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
   Future<void> _openSettings() async {
     final result = await Navigator.of(context).push<SettingsScreenResult>(
       MaterialPageRoute<SettingsScreenResult>(
-        builder: (_) =>
-            SettingsScreen(
-              initialWsUrl: _wsUrl,
-              initialThemeMode: Theme.of(context).brightness == Brightness.dark
-                  ? ThemeMode.dark
-                  : ThemeMode.light,
-              allowReconnect: true,
-            ),
+        builder: (_) => SettingsScreen(
+          initialThemeMode: Theme.of(context).brightness == Brightness.dark
+              ? ThemeMode.dark
+              : ThemeMode.light,
+          allowReconnect: true,
+        ),
       ),
     );
     if (!mounted || result == null || !result.saved) {
       return;
     }
-    setState(() {
-      _wsUrl = result.wsUrl;
-    });
     if (result.reconnectRequested) {
       await _reconnect();
     }
@@ -138,9 +133,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     final connectivity = _selected?.connectivity;
     if (connectivity == null) return AppStatusTone.neutral;
     return switch (connectivity) {
-      BridgeConnectivity.online => AppStatusTone.active,
-      BridgeConnectivity.assumeOffline => AppStatusTone.warning,
-      BridgeConnectivity.offline => AppStatusTone.danger,
+      EcoFlowConnectivity.online => AppStatusTone.active,
+      EcoFlowConnectivity.assumeOffline => AppStatusTone.warning,
+      EcoFlowConnectivity.offline => AppStatusTone.danger,
     };
   }
 
@@ -148,9 +143,9 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
     final connectivity = _selected?.connectivity;
     if (connectivity == null) return 'Estado N/D';
     return switch (connectivity) {
-      BridgeConnectivity.online => 'Online',
-      BridgeConnectivity.assumeOffline => 'Assume offline',
-      BridgeConnectivity.offline => 'Offline',
+      EcoFlowConnectivity.online => 'Online',
+      EcoFlowConnectivity.assumeOffline => 'Assume offline',
+      EcoFlowConnectivity.offline => 'Offline',
     };
   }
 
@@ -186,18 +181,18 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Bridge: $_wsUrl',
+                  'EcoFlow direct mode',
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: AppSpacing.sm),
                 AppStatusBadge(
                   label: _connectionState.message ?? 'Sin estado',
                   tone: switch (_connectionState.status) {
-                    BridgeConnectionStatus.connected => AppStatusTone.active,
-                    BridgeConnectionStatus.connecting => AppStatusTone.neutral,
-                    BridgeConnectionStatus.disconnected =>
+                    EcoFlowConnectionStatus.connected => AppStatusTone.active,
+                    EcoFlowConnectionStatus.connecting => AppStatusTone.neutral,
+                    EcoFlowConnectionStatus.disconnected =>
                       AppStatusTone.warning,
-                    BridgeConnectionStatus.error => AppStatusTone.warning,
+                    EcoFlowConnectionStatus.error => AppStatusTone.warning,
                   },
                 ),
                 const SizedBox(height: AppSpacing.md),
@@ -220,9 +215,14 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                         onChanged: (value) {
                           if (value == null) return;
                           setState(() {
-                            _selected = _devices
-                                .where((d) => d.deviceId == value)
-                                .firstOrNull;
+                            EcoFlowDeviceSnapshot? nextSelected;
+                            for (final device in _devices) {
+                              if (device.deviceId == value) {
+                                nextSelected = device;
+                                break;
+                              }
+                            }
+                            _selected = nextSelected;
                           });
                         },
                       ),
@@ -254,7 +254,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'No se pudo conectar al bridge',
+                    'No se pudo conectar a EcoFlow',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),
@@ -265,7 +265,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
           else if (snapshot == null)
             AppCard(
               child: Text(
-                'Esperando snapshots del bridge para mostrar métricas del dispositivo.',
+                'Esperando telemetría de EcoFlow para mostrar métricas del dispositivo.',
                 style: Theme.of(context).textTheme.bodyMedium,
               ),
             )
@@ -369,7 +369,7 @@ class _DeviceDashboardScreenState extends State<DeviceDashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Campos del Bridge',
+                    'Campos de EcoFlow',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: AppSpacing.sm),

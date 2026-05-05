@@ -4,6 +4,7 @@ import '../theme/theme_context.dart';
 import '../tokens/app_metrics.dart';
 
 enum AppStatusTone { neutral, active, warning, danger }
+
 enum AppStatusBadgeAnimation { none, surplus, deficit }
 
 class AppStatusBadge extends StatefulWidget {

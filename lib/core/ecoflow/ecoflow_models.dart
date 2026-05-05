@@ -1,27 +1,35 @@
-enum BridgeConnectivity { online, assumeOffline, offline }
+enum EcoFlowConnectivity { online, assumeOffline, offline }
 
-extension BridgeConnectivityX on BridgeConnectivity {
-  static BridgeConnectivity fromWire(Object? raw) {
+extension EcoFlowConnectivityX on EcoFlowConnectivity {
+  static EcoFlowConnectivity fromWire(Object? raw) {
     if (raw is String) {
       final normalized = raw.trim().toLowerCase();
-      if (normalized == 'online') return BridgeConnectivity.online;
+      if (normalized == 'online') return EcoFlowConnectivity.online;
       if (normalized == 'assume_offline') {
-        return BridgeConnectivity.assumeOffline;
+        return EcoFlowConnectivity.assumeOffline;
       }
-      if (normalized == 'offline') return BridgeConnectivity.offline;
+      if (normalized == 'offline') return EcoFlowConnectivity.offline;
     }
-    return BridgeConnectivity.assumeOffline;
+    return EcoFlowConnectivity.assumeOffline;
   }
 
-  static BridgeConnectivity fromLegacyOnline(bool? online) {
-    if (online == true) return BridgeConnectivity.online;
-    if (online == false) return BridgeConnectivity.offline;
-    return BridgeConnectivity.assumeOffline;
+  static EcoFlowConnectivity fromLegacyOnline(bool? online) {
+    if (online == true) return EcoFlowConnectivity.online;
+    if (online == false) return EcoFlowConnectivity.offline;
+    return EcoFlowConnectivity.assumeOffline;
+  }
+
+  String get wireName {
+    return switch (this) {
+      EcoFlowConnectivity.online => 'online',
+      EcoFlowConnectivity.assumeOffline => 'assume_offline',
+      EcoFlowConnectivity.offline => 'offline',
+    };
   }
 }
 
-class BridgeDeviceSnapshot {
-  const BridgeDeviceSnapshot({
+class EcoFlowDeviceSnapshot {
+  const EcoFlowDeviceSnapshot({
     required this.deviceId,
     required this.displayName,
     required this.model,
@@ -40,7 +48,7 @@ class BridgeDeviceSnapshot {
   final String displayName;
   final String? model;
   final String? imageUrl;
-  final BridgeConnectivity connectivity;
+  final EcoFlowConnectivity connectivity;
   final bool? onlineLegacy;
   final int? batteryPercent;
   final double? temperatureC;
@@ -49,17 +57,15 @@ class BridgeDeviceSnapshot {
   final Map<String, dynamic> metrics;
   final DateTime updatedAt;
 
-  @Deprecated(
-    'Use connectivity instead. This will be removed when v1 is retired.',
-  )
+  @Deprecated('Use connectivity instead.')
   bool? get online => onlineLegacy;
 
-  factory BridgeDeviceSnapshot.fromJson(Map<String, dynamic> json) {
+  factory EcoFlowDeviceSnapshot.fromJson(Map<String, dynamic> json) {
     final onlineLegacy = _asBool(json['online']);
     final parsedConnectivity = json.containsKey('connectivity')
-        ? BridgeConnectivityX.fromWire(json['connectivity'])
-        : BridgeConnectivityX.fromLegacyOnline(onlineLegacy);
-    return BridgeDeviceSnapshot(
+        ? EcoFlowConnectivityX.fromWire(json['connectivity'])
+        : EcoFlowConnectivityX.fromLegacyOnline(onlineLegacy);
+    return EcoFlowDeviceSnapshot(
       deviceId: (json['deviceId'] ?? '').toString(),
       displayName: (json['displayName'] ?? json['deviceId'] ?? 'Unknown')
           .toString(),
@@ -76,12 +82,29 @@ class BridgeDeviceSnapshot {
     );
   }
 
-  BridgeDeviceSnapshot copyWith({
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'deviceId': deviceId,
+      'displayName': displayName,
+      'model': model,
+      'imageUrl': imageUrl,
+      'online': onlineLegacy,
+      'connectivity': connectivity.wireName,
+      'batteryPercent': batteryPercent,
+      'temperatureC': temperatureC,
+      'totalInputW': totalInputW,
+      'totalOutputW': totalOutputW,
+      'metrics': metrics,
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  EcoFlowDeviceSnapshot copyWith({
     String? deviceId,
     String? displayName,
     String? model,
     String? imageUrl,
-    BridgeConnectivity? connectivity,
+    EcoFlowConnectivity? connectivity,
     bool? onlineLegacy,
     int? batteryPercent,
     double? temperatureC,
@@ -90,7 +113,7 @@ class BridgeDeviceSnapshot {
     Map<String, dynamic>? metrics,
     DateTime? updatedAt,
   }) {
-    return BridgeDeviceSnapshot(
+    return EcoFlowDeviceSnapshot(
       deviceId: deviceId ?? this.deviceId,
       displayName: displayName ?? this.displayName,
       model: model ?? this.model,
@@ -163,8 +186,8 @@ class BridgeDeviceSnapshot {
   }
 }
 
-class BridgeFleetItem {
-  const BridgeFleetItem({
+class EcoFlowFleetItem {
+  const EcoFlowFleetItem({
     required this.deviceId,
     required this.displayName,
     required this.model,
@@ -177,32 +200,33 @@ class BridgeFleetItem {
   final String deviceId;
   final String displayName;
   final String? model;
-  final BridgeConnectivity connectivity;
+  final EcoFlowConnectivity connectivity;
   final bool? onlineLegacy;
   final int? batteryPercent;
   final DateTime updatedAt;
 
-  factory BridgeFleetItem.fromJson(Map<String, dynamic> json) {
-    final onlineLegacy = BridgeDeviceSnapshot._asBool(json['online']);
+  factory EcoFlowFleetItem.fromJson(Map<String, dynamic> json) {
+    final onlineLegacy = EcoFlowDeviceSnapshot._asBool(json['online']);
     final parsedConnectivity = json.containsKey('connectivity')
-        ? BridgeConnectivityX.fromWire(json['connectivity'])
-        : BridgeConnectivityX.fromLegacyOnline(onlineLegacy);
-    return BridgeFleetItem(
+        ? EcoFlowConnectivityX.fromWire(json['connectivity'])
+        : EcoFlowConnectivityX.fromLegacyOnline(onlineLegacy);
+    return EcoFlowFleetItem(
       deviceId: (json['deviceId'] ?? '').toString(),
       displayName: (json['displayName'] ?? json['deviceId'] ?? 'Unknown')
           .toString(),
-      model: BridgeDeviceSnapshot._asString(json['model']),
+      model: EcoFlowDeviceSnapshot._asString(json['model']),
       connectivity: parsedConnectivity,
       onlineLegacy: onlineLegacy,
-      batteryPercent: BridgeDeviceSnapshot._asInt(json['batteryPercent']),
+      batteryPercent: EcoFlowDeviceSnapshot._asInt(json['batteryPercent']),
       updatedAt:
-          BridgeDeviceSnapshot._asDateTime(json['updatedAt']) ?? DateTime.now(),
+          EcoFlowDeviceSnapshot._asDateTime(json['updatedAt']) ??
+          DateTime.now(),
     );
   }
 }
 
-class BridgeCatalogItem {
-  const BridgeCatalogItem({
+class EcoFlowCatalogItem {
+  const EcoFlowCatalogItem({
     required this.deviceId,
     required this.displayName,
     required this.model,
@@ -214,48 +238,22 @@ class BridgeCatalogItem {
   final String? model;
   final String? imageUrl;
 
-  factory BridgeCatalogItem.fromJson(Map<String, dynamic> json) {
-    return BridgeCatalogItem(
+  factory EcoFlowCatalogItem.fromJson(Map<String, dynamic> json) {
+    return EcoFlowCatalogItem(
       deviceId: (json['deviceId'] ?? '').toString(),
       displayName: (json['displayName'] ?? json['deviceId'] ?? 'Unknown')
           .toString(),
-      model: BridgeDeviceSnapshot._asString(json['model']),
-      imageUrl: BridgeDeviceSnapshot._asString(json['imageUrl']),
+      model: EcoFlowDeviceSnapshot._asString(json['model']),
+      imageUrl: EcoFlowDeviceSnapshot._asString(json['imageUrl']),
     );
   }
 }
 
-enum BridgeEventType {
-  fleetState,
-  deviceSnapshot,
-  deviceDelta,
-  deviceCatalog,
-  unknown,
-}
+enum EcoFlowConnectionStatus { disconnected, connecting, connected, error }
 
-class BridgeEventEnvelope {
-  const BridgeEventEnvelope({
-    required this.version,
-    required this.type,
-    required this.payload,
-  });
+class EcoFlowConnectionState {
+  const EcoFlowConnectionState({required this.status, this.message});
 
-  final String version;
-  final BridgeEventType type;
-  final Map<String, dynamic> payload;
-
-  factory BridgeEventEnvelope.fromJson(Map<String, dynamic> json) {
-    final eventName = (json['event'] ?? '').toString();
-    return BridgeEventEnvelope(
-      version: (json['version'] ?? 'v1').toString(),
-      type: switch (eventName) {
-        'fleet_state' => BridgeEventType.fleetState,
-        'device_snapshot' => BridgeEventType.deviceSnapshot,
-        'device_delta' => BridgeEventType.deviceDelta,
-        'device_catalog' => BridgeEventType.deviceCatalog,
-        _ => BridgeEventType.unknown,
-      },
-      payload: BridgeDeviceSnapshot._asMap(json['payload']),
-    );
-  }
+  final EcoFlowConnectionStatus status;
+  final String? message;
 }

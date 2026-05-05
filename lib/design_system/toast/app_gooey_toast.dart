@@ -56,7 +56,10 @@ class AppGooeyToast {
     return id;
   }
 
-  String success(String title, {AppToastConfig config = const AppToastConfig()}) {
+  String success(
+    String title, {
+    AppToastConfig config = const AppToastConfig(),
+  }) {
     return show(title, type: AppToastType.success, config: config);
   }
 
@@ -64,7 +67,10 @@ class AppGooeyToast {
     return show(title, type: AppToastType.error, config: config);
   }
 
-  String warning(String title, {AppToastConfig config = const AppToastConfig()}) {
+  String warning(
+    String title, {
+    AppToastConfig config = const AppToastConfig(),
+  }) {
     return show(title, type: AppToastType.warning, config: config);
   }
 
@@ -117,7 +123,8 @@ class AppGooeyToast {
     }
   }
 
-  String _newId() => '${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 20)}';
+  String _newId() =>
+      '${DateTime.now().microsecondsSinceEpoch}-${Random().nextInt(1 << 20)}';
 }
 
 final appGooeyToast = AppGooeyToast.instance;

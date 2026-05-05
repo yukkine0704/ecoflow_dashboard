@@ -106,24 +106,32 @@ class AppGaugeCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(child: Center(child: Text(
-                          title.toUpperCase(),
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.6,
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              title.toUpperCase(),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.6,
+                              ),
+                            ),
                           ),
-                        ))),
+                        ),
                       ],
                     ),
                     if (subtitle != null) ...[
                       const SizedBox(height: AppSpacing.xs),
-                      Center(child: Text(
-                        subtitle!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: colors.onSurfaceVariant.withValues(alpha: 0.85),
+                      Center(
+                        child: Text(
+                          subtitle!,
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: colors.onSurfaceVariant.withValues(
+                              alpha: 0.85,
+                            ),
+                          ),
                         ),
                       ),
-                    )],
+                    ],
                     const SizedBox(height: AppSpacing.md),
                     Center(
                       child: SizedBox(
@@ -135,7 +143,9 @@ class AppGaugeCard extends StatelessWidget {
                             color: isSurplus
                                 ? colors.secondary.withValues(alpha: 0.55)
                                 : colors.error.withValues(alpha: 0.50),
-                            trackColor: colors.gaugeTrack.withValues(alpha: 0.72),
+                            trackColor: colors.gaugeTrack.withValues(
+                              alpha: 0.72,
+                            ),
                           ),
                         ),
                       ),
@@ -161,15 +171,23 @@ class AppGaugeCard extends StatelessWidget {
                           painter: _EnergyBalanceGaugePainter(
                             inputProgress: animatedInputProgress,
                             outputProgress: animatedOutputProgress,
-                            trackColor: colors.gaugeTrack.withValues(alpha: 0.85),
+                            trackColor: colors.gaugeTrack.withValues(
+                              alpha: 0.85,
+                            ),
                             inputColor: colors.primary,
-                            outputColor: colors.onSurfaceVariant.withValues(alpha: 0.7),
+                            outputColor: colors.onSurfaceVariant.withValues(
+                              alpha: 0.7,
+                            ),
                             fillColor: areaColor,
-                            inputFillColor: colors.primary.withValues(alpha: 0.16),
+                            inputFillColor: colors.primary.withValues(
+                              alpha: 0.16,
+                            ),
                             outputFillColor: colors.onSurfaceVariant.withValues(
                               alpha: 0.14,
                             ),
-                            tickColor: colors.onSurfaceVariant.withValues(alpha: 0.42),
+                            tickColor: colors.onSurfaceVariant.withValues(
+                              alpha: 0.42,
+                            ),
                           ),
                         ),
                       ),
@@ -188,9 +206,13 @@ class AppGaugeCard extends StatelessWidget {
                         Expanded(
                           child: _MetricReadout(
                             label: 'Consumption',
-                            value: outputValue == null ? null : animatedOutputValue,
+                            value: outputValue == null
+                                ? null
+                                : animatedOutputValue,
                             unit: unit,
-                            color: colors.onSurfaceVariant.withValues(alpha: 0.9),
+                            color: colors.onSurfaceVariant.withValues(
+                              alpha: 0.9,
+                            ),
                             alignEnd: true,
                           ),
                         ),

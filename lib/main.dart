@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
-import 'core/bridge/bridge_settings_storage.dart';
+import 'core/ecoflow/ecoflow_settings_storage.dart';
 import 'design_system/design_system.dart';
 import 'flows/app_entry_screen.dart';
 
@@ -19,7 +19,7 @@ class EcoFlowApp extends StatefulWidget {
 }
 
 class _EcoFlowAppState extends State<EcoFlowApp> {
-  final _settingsStorage = BridgeSettingsStorage();
+  final _settingsStorage = EcoFlowSettingsStorage();
   ThemeMode _themeMode = ThemeMode.system;
 
   @override
@@ -52,9 +52,7 @@ class _EcoFlowAppState extends State<EcoFlowApp> {
       darkTheme: AppTheme.dark(),
       themeMode: _themeMode,
       builder: (context, child) {
-        return AppGooeyToasterHost(
-          child: child ?? const SizedBox.shrink(),
-        );
+        return AppGooeyToasterHost(child: child ?? const SizedBox.shrink());
       },
       home: AppEntryScreen(
         themeMode: _themeMode,
