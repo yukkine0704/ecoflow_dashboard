@@ -36,8 +36,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   late EcoFlowDeviceSnapshot _snapshot;
   StreamSubscription<EcoFlowDeviceSnapshot>? _deviceSub;
   StreamSubscription<DeviceHistorySeries>? _historySub;
+  Timer? _thermalGateTicker;
   late final AnimationController _thermalController;
   DeviceHistorySeries? _historySeries;
+  final Map<String, DateTime> _cellAboveWarmSince = <String, DateTime>{};
+  static const Duration _cellAnimationActivationDelay = Duration(seconds: 10);
+  static const double _cellWarmThresholdC = 37;
 
   @override
   void initState() {
@@ -47,6 +51,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
       vsync: this,
       duration: const Duration(milliseconds: 2200),
     )..repeat();
+    _thermalGateTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
     _deviceSub = widget.repository.deviceUpdates.listen((updated) {
       if (!mounted || updated.deviceId != widget.deviceId) {
         return;
@@ -67,6 +76,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
   void dispose() {
     unawaited(_deviceSub?.cancel());
     unawaited(_historySub?.cancel());
+    _thermalGateTicker?.cancel();
     _thermalController.dispose();
     super.dispose();
   }
@@ -620,6 +630,30 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     };
   }
 
+  double _cellPhaseOffset(_ThermalCellVm cell) {
+    final normalizedFromId = (cell.id.hashCode.abs() % 1000) / 1000;
+    final normalizedFromIndex = (cell.index % 17) / 17;
+    return (normalizedFromId + normalizedFromIndex) % 1.0;
+  }
+
+  double _bandHeatLevel(_ThermalBand band) {
+    return switch (band) {
+      _ThermalBand.cool => 0.08,
+      _ThermalBand.nominal => 0.24,
+      _ThermalBand.warm => 0.68,
+      _ThermalBand.critical => 1.0,
+    };
+  }
+
+  bool _isCellAnimationActivated(_ThermalCellVm cell, DateTime now) {
+    if (cell.tempC < _cellWarmThresholdC) {
+      _cellAboveWarmSince.remove(cell.id);
+      return false;
+    }
+    final since = _cellAboveWarmSince.putIfAbsent(cell.id, () => now);
+    return now.difference(since) >= _cellAnimationActivationDelay;
+  }
+
   bool _isDelta3Device() {
     if (_snapshot.deviceId == 'P351ZAHAPH2R2706') {
       return true;
@@ -868,8 +902,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   _ThermalBand _thermalBandFor(double tempC) {
     if (tempC < 30) return _ThermalBand.cool;
-    if (tempC < 40) return _ThermalBand.nominal;
-    if (tempC < 48) return _ThermalBand.warm;
+    if (tempC < 37) return _ThermalBand.nominal;
+    if (tempC < 40) return _ThermalBand.warm;
     return _ThermalBand.critical;
   }
 
@@ -1241,6 +1275,8 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
 
   Widget _buildThermalCard(BuildContext context) {
     final summary = _thermalSummary();
+    final validIds = summary.cells.map((c) => c.id).toSet();
+    _cellAboveWarmSince.removeWhere((id, _) => !validIds.contains(id));
     final cs = Theme.of(context).colorScheme;
     final indicatorColor = _bandColor(
       context,
@@ -1309,41 +1345,92 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen>
     }
 
     Widget cellBubble(_ThermalCellVm cell) {
-      final color = _bandColor(context, cell.band, chip: true);
-      final isHot =
+      final targetColor = _bandColor(context, cell.band, chip: true);
+      final now = DateTime.now();
+      final isActivated = _isCellAnimationActivated(cell, now);
+      final isAnimBand =
           cell.band == _ThermalBand.warm || cell.band == _ThermalBand.critical;
-      return AnimatedBuilder(
-        animation: _thermalController,
-        builder: (context, child) {
-          final phase = _thermalController.value;
-          final pulse = isHot
-              ? (0.96 + 0.08 * math.sin(phase * math.pi * 2))
-              : 1.0;
-          return Transform.scale(scale: pulse, child: child);
+      final targetHeat = (isActivated && isAnimBand)
+          ? _bandHeatLevel(cell.band)
+          : 0.0;
+      final phaseOffset = _cellPhaseOffset(cell);
+      return TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: targetHeat),
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+        builder: (context, heat, _) {
+          return TweenAnimationBuilder<Color?>(
+            tween: ColorTween(end: targetColor),
+            duration: const Duration(milliseconds: 420),
+            curve: Curves.easeOutCubic,
+            builder: (context, animatedColor, unusedChild) {
+              final color = animatedColor ?? targetColor;
+              final showShadow = heat >= 0.55;
+              return AnimatedBuilder(
+                animation: _thermalController,
+                builder: (context, child) {
+                  final phase = heat > 0
+                      ? (_thermalController.value + phaseOffset) % 1.0
+                      : 0.0;
+                  final amplitude = 0.06 * heat;
+                  final pulse = 1.0 + amplitude * math.sin(phase * math.pi * 2);
+                  return Transform.scale(scale: pulse, child: child);
+                },
+                child: Container(
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.transparent,
+                    boxShadow: showShadow
+                        ? [
+                            BoxShadow(
+                              color: color.withValues(
+                                alpha: 0.16 + 0.12 * heat,
+                              ),
+                              blurRadius: 10 + (10 * heat),
+                              spreadRadius: 0.4 + (1.2 * heat),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      RepaintBoundary(
+                        child: AnimatedBuilder(
+                          animation: _thermalController,
+                          builder: (context, _) {
+                            final phase = heat > 0
+                                ? (_thermalController.value + phaseOffset) % 1.0
+                                : 0.0;
+                            return CustomPaint(
+                              painter: _ThermalOrbPainter(
+                                phase: phase,
+                                band: cell.band,
+                                color: color,
+                                intensity: heat,
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      Center(
+                        child: Text(
+                          '${cell.tempC.toStringAsFixed(1)}°',
+                          style: Theme.of(context).textTheme.labelMedium
+                              ?.copyWith(
+                                color: color,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
         },
-        child: Container(
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: color.withValues(alpha: 0.23),
-            boxShadow: isHot
-                ? [
-                    BoxShadow(
-                      color: color.withValues(alpha: 0.22),
-                      blurRadius: 18,
-                      spreadRadius: 1,
-                    ),
-                  ]
-                : null,
-          ),
-          child: Text(
-            '${cell.tempC.toStringAsFixed(1)}°',
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: color,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-        ),
       );
     }
 
@@ -1775,15 +1862,37 @@ class _ThermalOrb extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: controller,
-      builder: (context, _) {
-        return CustomPaint(
-          painter: _ThermalOrbPainter(
-            phase: controller.value,
-            band: band,
-            color: color,
-          ),
+    final targetIntensity = switch (band) {
+      _ThermalBand.cool => 0.08,
+      _ThermalBand.nominal => 0.24,
+      _ThermalBand.warm => 0.68,
+      _ThermalBand.critical => 1.0,
+    };
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(end: targetIntensity),
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      builder: (context, intensity, _) {
+        return TweenAnimationBuilder<Color?>(
+          tween: ColorTween(end: color),
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          builder: (context, animatedColor, unusedChild) {
+            final resolvedColor = animatedColor ?? color;
+            return AnimatedBuilder(
+              animation: controller,
+              builder: (context, animatedChild) {
+                return CustomPaint(
+                  painter: _ThermalOrbPainter(
+                    phase: controller.value,
+                    band: band,
+                    color: resolvedColor,
+                    intensity: intensity,
+                  ),
+                );
+              },
+            );
+          },
         );
       },
     );
@@ -1795,26 +1904,31 @@ class _ThermalOrbPainter extends CustomPainter {
     required this.phase,
     required this.band,
     required this.color,
+    this.intensity = 1.0,
   });
 
   final double phase;
   final _ThermalBand band;
   final Color color;
+  final double intensity;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = size.center(Offset.zero);
-    final radius = size.shortestSide * 0.43;
+    final radius = size.shortestSide * 0.39;
 
     final glowPaint = Paint()
       ..style = PaintingStyle.fill
-      ..color = color.withValues(alpha: band.severity >= 2 ? 0.22 : 0.14)
+      ..color = color.withValues(alpha: 0.1 + 0.16 * intensity)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
     canvas.drawCircle(center, radius + 3, glowPaint);
 
     final base = Paint()
       ..shader = RadialGradient(
-        colors: [color.withValues(alpha: 0.55), color.withValues(alpha: 0.18)],
+        colors: [
+          color.withValues(alpha: 0.38 + 0.22 * intensity),
+          color.withValues(alpha: 0.14 + 0.08 * intensity),
+        ],
       ).createShader(Rect.fromCircle(center: center, radius: radius));
     canvas.drawCircle(center, radius, base);
 
@@ -1830,12 +1944,15 @@ class _ThermalOrbPainter extends CustomPainter {
 
     if (band.severity >= 2) {
       final path = Path();
-      final spikes = 8;
+      final spikes = 18;
       for (var i = 0; i <= spikes; i++) {
         final t = i / spikes;
         final ang = t * math.pi * 2 + (phase * math.pi * 2);
         final r =
-            radius * (0.45 + 0.1 * math.sin((phase * 4 + t * 7) * math.pi * 2));
+            radius *
+            (0.34 +
+                (0.04 * intensity) *
+                    math.sin((phase * 4 + t * 7) * math.pi * 2));
         final point = Offset(
           center.dx + math.cos(ang) * r,
           center.dy + math.sin(ang) * r,
@@ -1849,7 +1966,7 @@ class _ThermalOrbPainter extends CustomPainter {
       path.close();
       final core = Paint()
         ..style = PaintingStyle.fill
-        ..color = color.withValues(alpha: 0.35);
+        ..color = color.withValues(alpha: 0.24 + 0.14 * intensity);
       canvas.drawPath(path, core);
     }
   }
@@ -1858,6 +1975,7 @@ class _ThermalOrbPainter extends CustomPainter {
   bool shouldRepaint(covariant _ThermalOrbPainter oldDelegate) {
     return oldDelegate.phase != phase ||
         oldDelegate.band != band ||
-        oldDelegate.color != color;
+        oldDelegate.color != color ||
+        oldDelegate.intensity != intensity;
   }
 }
